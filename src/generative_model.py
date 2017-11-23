@@ -950,7 +950,7 @@ def draw_network(N, C, R, thetas, M, e, L_G, L_X):
 	plt.scatter(community_cartesian[:,0], community_cartesian[:,1], c=np.arange(C), s=100)
 	plt.scatter(community_cartesian[:,0], community_cartesian[:,1], c = "k", s=25)
 	# plt.show()
-	plt.savefig("../plots/epoch_{}.png".format(e))
+	plt.savefig("plots/epoch_{}.png".format(e))
 	plt.close()
 
 def parse_args():
