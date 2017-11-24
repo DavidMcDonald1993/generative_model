@@ -2,7 +2,7 @@
 
 #SBATCH --ntasks 25
 #SBATCH --time 1-00:00:00
-#SBATCH --mem 64000
+#SBATCH --mem 100gb
 
 set -e
 
