@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --ntasks 25
-#SBATCH --time 10-00:00:00
+#SBATCH --time 1-00:00:00
 #SBATCH --mem 64000
 
 module purge; module load bluebear

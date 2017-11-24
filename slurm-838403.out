@@ -1,0 +1,28 @@
++--------------------------------------------------------------------------+
+| Job starting at Fri Nov 24 08:23:21 2017 for dxm237(356284) on the BlueBEAR Cluster
+| Job identity jobid 838403 jobname facebook_script.sh
+| Job is running against project hesz01 and in partition broadwell-shared
+| Job requests cpu=25,mem=125G,node=2 - 1-00:00:00 walltime
+| Job assigned to nodes bber0501u33a,bber0501u33b
++--------------------------------------------------------------------------+
+Traceback (most recent call last):
+  File "src/generative_model.py", line 21, in <module>
+    import matplotlib.pyplot as plt
+  File "/gpfs/bb/dxm237/.local/lib/python2.7/site-packages/matplotlib/pyplot.py", line 113, in <module>
+    _backend_mod, new_figure_manager, draw_if_interactive, _show = pylab_setup()
+  File "/gpfs/bb/dxm237/.local/lib/python2.7/site-packages/matplotlib/backends/__init__.py", line 60, in pylab_setup
+    [backend_name], 0)
+  File "/gpfs/bb/dxm237/.local/lib/python2.7/site-packages/matplotlib/backends/backend_tkagg.py", line 6, in <module>
+    from six.moves import tkinter as Tk
+  File "/gpfs/bb/dxm237/.local/lib/python2.7/site-packages/six.py", line 203, in load_module
+    mod = mod._resolve()
+  File "/gpfs/bb/dxm237/.local/lib/python2.7/site-packages/six.py", line 115, in _resolve
+    return _import_module(self.mod)
+  File "/gpfs/bb/dxm237/.local/lib/python2.7/site-packages/six.py", line 82, in _import_module
+    __import__(name)
+ImportError: No module named Tkinter
++--------------------------------------------------------------------------+
+| Job finished at Fri Nov 24 08:23:52 2017 for dxm237(356284) on the BlueBEAR Cluster
+| Job required (00:01.951 cputime, 1356K memory used) - 00:00:31 walltime
+| Job exitcode 1:0
++--------------------------------------------------------------------------+
