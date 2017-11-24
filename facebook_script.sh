@@ -2,7 +2,7 @@
 
 #SBATCH --ntasks 1
 #SBATCH --time 1-00:00:00
-#SBATCH --mem 32gb
+#SBATCH --mem-per-cpu 32gb
 
 set -e
 
