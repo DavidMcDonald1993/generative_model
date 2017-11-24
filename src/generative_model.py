@@ -95,7 +95,7 @@ def hyperbolic_distance(R, thetas, M):
 		return
 	h = R[:,None] + M[:,0] + 2 * np.log(delta_theta / 2)
 	return delta_theta, h
-
+# MINOR CHANGE
 # def hyperbolic_distance_u(u, R, thetas, M):
 # 	delta_theta_u = np.pi - abs(np.pi - abs(thetas[u] - M[:,1]))
 # 	x_u = np.cosh(R[u]) * np.cosh(M[:,0]) - np.sinh(R[u]) * np.sinh(M[:,0]) * np.cos(delta_theta_u)
