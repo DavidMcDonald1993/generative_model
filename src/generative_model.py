@@ -1,3 +1,5 @@
+# from memory_profiler import profile
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -711,7 +713,7 @@ def preprocess_true_communities(nodes, true_community_file):
 
 def initialize_matrices(L, N, C, K, R):
 
-	sigma = R.mean()
+	sigma = 1
 	community_radii = R.mean()
 	noise = 1e-2
 	# community matrix M
@@ -875,16 +877,16 @@ def train(A, X, N, K, C, R, thetas, M, W,
 		# stdout.write("thetas=\n")
 		# stdout.write("{}\n".format(thetas[:10]))
 
-		stdout.write("M=\n")
-		stdout.write("{}\n".format(M))
+		# stdout.write("M=\n")
+		# stdout.write("{}\n".format(M))
 		
 		_, h = hyperbolic_distance(R, thetas, M)
 		F = compute_F(h, M)
 		community_predictions = F.argmax(axis=1)
 		F = np.column_stack([F, np.ones(N)])
 
-		stdout.write("F=\n")
-		stdout.write("{}\n".format(F[:5]))
+		# stdout.write("F=\n")
+		# stdout.write("{}\n".format(F[:5]))
 
 		# P = compute_P(F)
 
@@ -927,9 +929,9 @@ def train(A, X, N, K, C, R, thetas, M, W,
 			# NMI
 			stdout.write("NMI: {}\n".format(NMI(true_communities, community_predictions)))
 
-		stdout.flush()
-
 		draw_network(N, C, R, thetas, M, e, L_G, L_X)
+
+		stdout.flush()
 
 	if num_processes is not None:
 		pool.close()
@@ -996,7 +998,7 @@ def parse_args():
 	args = parser.parse_args()
 
 	return args
-
+@profile
 def main():
 
 	args = parse_args()
