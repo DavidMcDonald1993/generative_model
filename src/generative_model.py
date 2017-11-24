@@ -198,10 +198,10 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 
 	partial_F_u_partial_theta_u = partial_F_u_partial_delta_theta_u\
 	.dot(partial_delta_theta_u_partial_theta_u)
-	# norm = sp.linalg.norm(partial_F_u_partial_theta_u)
+	norm = sp.linalg.norm(partial_F_u_partial_theta_u)
 	# print norm 
-	# if norm > 1:
-	# 	partial_F_u_partial_theta_u /= norm
+	if norm > 1:
+		partial_F_u_partial_theta_u /= norm
 
 	# partial_F_u_partial_theta_u = partial_F_u_partial_h_u\
 	# .dot(partial_h_u_partial_x_u)\
@@ -1019,8 +1019,6 @@ def main():
 
 	thetas, M, W = initialize_matrices(L, N, C, K, R)
 	stdout.write("Initialized matrices\n")
-
-	print M
 
 	eta = args.eta
 	alpha = args.alpha
