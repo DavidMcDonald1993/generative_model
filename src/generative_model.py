@@ -713,7 +713,7 @@ def preprocess_true_communities(nodes, true_community_file):
 
 def initialize_matrices(L, N, C, K, R):
 
-	sigma = 1
+	sigma = 10
 	community_radii = R.mean()
 	noise = 1e-2
 	# community matrix M
