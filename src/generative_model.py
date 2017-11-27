@@ -371,91 +371,34 @@ def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attr
 	P = compute_P(F)
 	
 	# partial delta theta
-	# partial_delta_theta_c_partial_theta_c = np.array([-np.sign(np.pi - abs(thetas[u] - M[c,1]))\
-	#  * -np.sign(thetas[u] - M[c,1]) * -1 for u in range(N)])
-	partial_delta_theta_c_partial_theta_c = -np.sign(np.pi - abs(thetas - M[c,1]))\
-	 * -np.sign(thetas - M[c,1]) * -1
+	partial_delta_theta_c_partial_theta_c = - np.multiply(-np.sign(np.pi - abs(thetas - M[1, c])), 
+		-np.sign(thetas - M[1, c]))
 	
-	# partial h
-	# partial_x_c_partial_delta_theta_c = np.diag([np.sinh(R[u]) * np.sinh(M[c,0]) * np.sin(delta_theta[u,c])\
-	# 	for u in range(N)])
-	# partial_x_c_partial_delta_theta_c = np.diag(np.sinh(R) * np.sinh(M[c,0]) * np.sin(delta_theta[:,c]))
 
-	# partial_h_c_partial_x_c = np.diag([1 / np.sqrt(x[u, c] ** 2 - 1) for u in range(N)])
-	# partial_h_c_partial_x_c = np.diag(1 / np.sqrt(x[:, c] ** 2 - 1))
-	
-	# partial F
-	# partial_F_c_partial_h_c = np.diag([ - h[u, c] / M[c, 2] ** 2 * F[u, c] for u in range(N)]) 
-	# partial_F_c_partial_h_c = np.diag(-h[:, c] / M[c, 2] ** 2 * F[:, c]) 
-
-	# partial_F_c_partial_delta_theta_c = sp.sparse.diags(-h[:, c] / M[c, 2] ** 2 * F[:, c] * 
-	# 	1 / np.sqrt(x[:, c] ** 2 - 1) * np.sinh(R) * np.sinh(M[c,0]) * np.sin(delta_theta[:,c]))
-
-	partial_F_c_partial_delta_theta_c = sp.sparse.diags(-h[:, c] / M[c, 2] ** 2 * F[:, c] * 
-		4 / delta_theta[:,c])
+	partial_F_c_partial_delta_theta_c = np.multiply(np.multiply(-h[:, c] / np.square(M[2, c]), 
+		F[:,c]), 4 / delta_theta[:,c]).T
+	partial_F_c_partial_delta_theta_c = sp.sparse.spdiags(partial_F_c_partial_delta_theta_c, 0,
+		partial_F_c_partial_delta_theta_c.shape[1], partial_F_c_partial_delta_theta_c.shape[1])
 	
 	partial_F_c_partial_theta_c = partial_F_c_partial_delta_theta_c.dot(partial_delta_theta_c_partial_theta_c)
-
-	# print partial_F_c_partial_theta_c
-
-	# norm = sp.linalg.norm(partial_F_c_partial_theta_c)
-	# print norm
-	# if norm > 1:
-	# 	partial_F_c_partial_theta_c /= norm
-
-	# partial L_G 
-	# partial_P_partial_F_c = np.array([[[F[v, c] * np.exp( - F[u].dot(F[v])) if u_prime == u\
-	# else F[u, c] * np.exp( - F[u].dot(F[v])) if u_prime == v else 0\
-	# for u_prime in range(N)] for v in range(N)] for u in range(N)])
-
-	# partial_P_partial_F_c = np.zeros((N, N, N))
-	# U = np.repeat(np.arange(N), 2*N)
-	# V = np.tile(np.repeat(np.arange(N), 2), N)
-	# U_even = U[np.arange(U.shape[0]) % 2 == 0]
-	# V_even = V[np.arange(V.shape[0]) % 2 == 0]
-	# exp = np.exp(-F.dot(F.T))
-	# partial_P_partial_F_c[U, V, np.column_stack([U_even, V_even]).flatten()] =\
-	# F[np.column_stack([V_even, U_even]).flatten(), c] * exp[U, V]
-
-	# # partial_L_G_partial_P = 1.0 / N**2 *\
-	# partial_L_G_partial_P = 1.0 / N * \
-	# (A / P - (1 - A.todense()) / (1 - P))
-	# # np.array([[A[u,v] / P[u,v] - (1 - A[u,v]) / (1 - P[u,v])\
-	# # 	for v in range(N)] for u in range(N)])
-
-	# partial_L_G_c_partial_F_c = np.tensordot(partial_L_G_partial_P,partial_P_partial_F_c)
 
 	partial_L_G_partial_P = - 1.0 / N * \
 	(A / P - 1 / (1 - P) + A / (1 - P)).reshape(1, -1)
 
 	partial_P_partial_F_c = compute_partial_P_partial_F_c(c, N, A, P, F)
-
-	partial_L_G_c_partial_F_c = partial_L_G_partial_P * partial_P_partial_F_c
-
-
-	# partial_F_c_partial_theta_c = partial_F_c_partial_h_c\
-	# .dot(partial_h_c_partial_x_c)\
-	# .dot(partial_x_c_partial_delta_theta_c)\
-	# .dot(partial_delta_theta_c_partial_theta_c)
-
+	partial_L_G_c_partial_F_c = partial_P_partial_F_c.multiply(partial_L_G_partial_P).sum(axis=1).T
 
 	partial_L_G_c_partial_theta_c = partial_L_G_c_partial_F_c.dot(partial_F_c_partial_theta_c)
 
-	partial_l1_F_c_partial_F_c = np.sign(F[:,c])
+	partial_l1_F_c_partial_F_c = np.sign(F[:,c]).T
 	
 	# LX
 	F = np.column_stack([F, np.ones(N)])
 	Q = compute_Q(F, W, attribute_type)
 
-	# partial_L_X_c_partial_Q = 1.0 / (N*K) * np.array([[X[u, k] / Q[u, k] - (1 - X[u, k]) / (1 - Q[u, k])\
-	# 	for k in range(K)] for u in range(N)])
-	# partial_Q_partial_F_c = np.array([[[Q[u,k] * (1 - Q[u,k]) * W[k,c] if u_prime == u else 0\
-	# 	for u_prime in range(N)] for k in range(K)] for u in range(N)])
-	# partial_L_X_c_partial_F_c = np.tensordot(partial_L_X_c_partial_Q, partial_Q_partial_F_c)
-
 	# partial_L_X_c_partial_F_c = 1.0 / (N * K) *\
 	partial_L_X_c_partial_F_c = - 1.0 / N * \
-	(X - Q).dot(W[:,c])
+	(X - Q).dot(W[:,c]).T
 	# np.array([(X[u] - Q[u]).dot(W[:,c]) for u in range(N)])
 
 	partial_L_X_c_partial_theta_c = partial_L_X_c_partial_F_c.dot(partial_F_c_partial_theta_c)
@@ -473,59 +416,28 @@ def update_community_sd_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribu
 	delta_theta, h = hyperbolic_distance(R, thetas, M)
 	F = compute_F(h, M)
 	P = compute_P(F)
-	
 	# partial F
-	# partial_F_c_partial_sd_c = np.array([h[u, c] ** 2 / M[c, 2] ** 3 * F[u,c] for u in range(N)])
-	partial_F_c_partial_sd_c = h[:, c] ** 2 / M[c, 2] ** 3 * F[:,c]
+	partial_F_c_partial_sd_c = np.multiply(np.square(h[:, c]) / np.power(M[2, c], 3), F[:,c])
 	# partial_F_c_partial_sd_c = F[:,c] * (h[:,c] ** 2 / M[c,2] ** 3 - 1 / M[c,2])
-
-	# partial L_G 
-	# partial_P_partial_F_c = np.array([[[F[v, c] * np.exp( - F[u].dot(F[v])) if u_prime == u\
-	# else F[u, c] * np.exp( - F[u].dot(F[v])) if u_prime == v else 0\
-	# for u_prime in range(N)] for v in range(N)] for u in range(N)])
-	# partial_P_partial_F_c = np.zeros((N, N, N))
-	# U = np.repeat(np.arange(N), 2*N)
-	# V = np.tile(np.repeat(np.arange(N), 2), N)
-	# U_even = U[np.arange(U.shape[0]) % 2 == 0]
-	# V_even = V[np.arange(V.shape[0]) % 2 == 0]
-	# exp = np.exp(-F.dot(F.T))
-	# partial_P_partial_F_c[U, V, np.column_stack([U_even, V_even]).flatten()] =\
-	# F[np.column_stack([V_even, U_even]).flatten(), c] * exp[U, V]
-
-	# # partial_L_G_partial_P = 1.0 / N**2 *\
-	# partial_L_G_partial_P = 1.0 / N * \
-	# (A / P - (1 - A.todense()) / (1 - P))
-	# # np.array([[A[u,v] / P[u,v] - (1 - A[u,v]) / (1 - P[u,v])\
-	# # 	for v in range(N)] for u in range(N)])
-
-	# partial_L_G_c_partial_F_c = np.tensordot(partial_L_G_partial_P,partial_P_partial_F_c)
 
 
 	partial_L_G_partial_P = - 1.0 / N * \
 	(A / P - 1 / (1 - P) + A / (1 - P)).reshape(1, -1)
 
 	partial_P_partial_F_c = compute_partial_P_partial_F_c(c, N, A, P, F)
-
-	partial_L_G_c_partial_F_c = partial_L_G_partial_P * partial_P_partial_F_c
+	partial_L_G_c_partial_F_c = partial_P_partial_F_c.multiply(partial_L_G_partial_P).sum(axis=1).T
 
 	partial_L_G_c_partial_sd_c = partial_L_G_c_partial_F_c.dot(partial_F_c_partial_sd_c)
 
-	partial_l1_F_c_partial_F_c = np.sign(F[:,c])
+	partial_l1_F_c_partial_F_c = np.sign(F[:,c]).T
 	
 	# partial L_x 
 	F = np.column_stack([F, np.ones(N)])
 	Q = compute_Q(F, W, attribute_type)
 
-	# partial_L_X_c_partial_Q = 1.0 / (N*K) * np.array([[X[u, k] / Q[u, k] - (1 - X[u, k]) / (1 - Q[u, k])\
-	# 	for k in range(K)] for u in range(N)])
-	# partial_Q_partial_F_c = np.array([[[Q[u,k] * (1 - Q[u,k]) * W[k,c] if u_prime == u else 0\
-	# 	for u_prime in range(N)] for k in range(K)] for u in range(N)])
-	# partial_L_X_c_partial_F_c = np.tensordot(partial_L_X_c_partial_Q, partial_Q_partial_F_c)
-
 	# partial_L_X_c_partial_F_c = 1.0 / (N * K) *\
 	partial_L_X_c_partial_F_c = - 1.0 / N * \
-	(X - Q).dot(W[:,c])
-	# np.array([(X[u] - Q[u]).dot(W[:,c]) for u in range(N)])
+	(X - Q).dot(W[:,c]).T
 
 	partial_L_X_c_partial_sd_c = partial_L_X_c_partial_F_c.dot(partial_F_c_partial_sd_c)
 
@@ -726,10 +638,10 @@ def train(A, X, N, K, C, R, thetas, M, W,
 		if num_processes is None:
 			
 			# print "thetas"
-			# for u in np.random.permutation(N):
-			# 	thetas[u] -= eta * update_theta_u(u, N, K, C, A, X, R,
-			# 		thetas, M, W, alpha, lamb_F, attribute_type)
-			# 	thetas[u] = thetas[u] % (2 * np.pi)
+			for u in np.random.permutation(N):
+				thetas[u] -= eta * update_theta_u(u, N, K, C, A, X, R,
+					thetas, M, W, alpha, lamb_F, attribute_type)
+				thetas[u] = thetas[u] % (2 * np.pi)
 
 			# print "r"
 			for c in np.random.permutation(C):
@@ -737,15 +649,15 @@ def train(A, X, N, K, C, R, thetas, M, W,
 					thetas, M, W, alpha, lamb_F, attribute_type)
 
 			# # # print "community thetas"
-			# for c in np.random.permutation(C):
-			# 	M[1, c] -= eta * update_community_theta_c(c, N, K, A, X, R,
-			# 		thetas, M, W, alpha, lamb_F, attribute_type)
-			# 	M[1, c] = M[c, 1] % (2 * np.pi)
+			for c in np.random.permutation(C):
+				M[1, c] -= eta * update_community_theta_c(c, N, K, A, X, R,
+					thetas, M, W, alpha, lamb_F, attribute_type)
+				M[1, c] = M[1, c] % (2 * np.pi)
 
 			# # # print "sd"
-			# for c in np.random.permutation(C):
-			# 	M[2, c] -= eta * update_community_sd_c(c, N, K, A, X, R,
-			# 		thetas, M, W, alpha, lamb_F, attribute_type)
+			for c in np.random.permutation(C):
+				M[2, c] -= eta * update_community_sd_c(c, N, K, A, X, R,
+					thetas, M, W, alpha, lamb_F, attribute_type)
 
 		else:
 			delta_thetas = np.concatenate(pool.map(partial(update_theta_u, 
@@ -761,66 +673,41 @@ def train(A, X, N, K, C, R, thetas, M, W,
 
 			delta_M = np.concatenate(pool.map(partial(update_community_r_c, 
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
-				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)))
-
-			# print "r"
-			# print delta_M
+				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
 			# norm = np.linalg.norm(delta_M)
 			# if norm > 1:
 			# 	delta_M /= norm
 			# print delta_M
-			M[:,0] -= eta * delta_M
+			M[0] -= eta * delta_M
 
 			delta_M = np.concatenate(pool.map(partial(update_community_theta_c, 
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
-				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)))
-
-			# print "theta"
-			# print delta_M
+				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
 			# norm = np.linalg.norm(delta_M)
 			# if norm > 1:
 			# 	delta_M /= norm
 			# print delta_M
-			M[:,1] -= eta * delta_M
-			M[:,1] = M[:,1] % (2 * np.pi)
-
+			M[1] -= eta * delta_M
+			M[1] = M[1] % (2 * np.pi)
 
 			delta_M = np.concatenate(pool.map(partial(update_community_sd_c, 
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
-				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)))
+				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
-			# print "sd"
-			# print delta_M
 
 			# norm = np.linalg.norm(delta_M)
 			# if norm > 1:
 			# 	delta_M /= norm
 			# print delta_M
-			M[:,2] -= eta * delta_M
-		
-		# stdout.write("thetas=\n")
-		# stdout.write("{}\n".format(thetas[:10]))
-
-		# stdout.write("M=\n")
-		# stdout.write("{}\n".format(M))
+			M[2] -= eta * delta_M
 		
 		_, h = hyperbolic_distance(R, thetas, M)
 		F = compute_F(h, M)
 		community_predictions = F.argmax(axis=1).A1
 		F = np.column_stack([F, np.ones(N)])
 
-		# stdout.write("F=\n")
-		# stdout.write("{}\n".format(F[:5]))
-
-		# P = compute_P(F)
-
-		# stdout.write("P=\n")
-		# stdout.write("{}\n".format(P[:5, :10]))
-
-		# stdout.write("A=\n")
-		# stdout.write("{}\n".format(A[:5, :10].toarray()))
 
 		if  num_processes is None:
 
@@ -829,22 +716,11 @@ def train(A, X, N, K, C, R, thetas, M, W,
 
 		else:
 
-			delta_W = np.array(pool.map(partial(update_W_k, 
+			delta_W = np.concatenate(pool.map(partial(update_W_k, 
 				N=N, K=K, C=C, X=X, F=F, W=W, 
-				alpha=alpha, lamb_W=lamb_W, attribute_type=attribute_type), range(K)))
+				alpha=alpha, lamb_W=lamb_W, attribute_type=attribute_type), range(K)), axis=0)
 
 			W -= eta * delta_W
-
-		# stdout.write("W=\n")
-		# stdout.write("{}\n".format(W[:5]))
-
-		# Q = compute_Q(F, W, attribute_type)
-
-		# stdout.write("Q=\n")
-		# stdout.write("{}\n".format(Q[:5, :10]))
-
-		# stdout.write("X=\n")
-		# stdout.write("{}\n".format(X[:5, :10].toarray()))
 
 		L_G, L_X, l1_F, l1_W, loss = compute_likelihood(A, X, N, K, R, thetas, M, W, 
 			lamb_F=lamb_F, lamb_W=lamb_W, alpha=alpha, attribute_type=attribute_type)
@@ -872,15 +748,10 @@ def draw_network(N, C, R, thetas, M, e, L_G, L_X, plot_directory):
 	assignments = F.argmax(axis=1).A1
 	assignment_strength = F[np.arange(N), assignments].A1
 
-	# print assignment_strength
-
 	node_cartesian = np.column_stack([np.multiply(R, np.cos(thetas)),
 	np.multiply(R, np.sin(thetas))])
 	community_cartesian = np.column_stack([np.multiply(M[0], np.cos(M[1])).T, 
 		np.multiply(M[0], np.sin(M[1])).T])
-
-	# print assignments
-	# print C
 
 	plt.figure(figsize=(15, 15))
 	plt.title("Epoch={}, L_G={}, L_X={}".format(e, L_G, L_X))
