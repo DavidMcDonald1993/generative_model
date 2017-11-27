@@ -1,4 +1,4 @@
-# from memory_profiler import profile
+import os
 
 import matplotlib
 matplotlib.use("Agg")
@@ -7,7 +7,6 @@ import argparse
 
 import numpy as np
 import scipy as sp
-# from scipy.sparse import csr_matrix
 import networkx as nx
 import pandas as pd
 
@@ -25,37 +24,44 @@ from sklearn.cluster import KMeans
 
 import matplotlib.pyplot as plt
 
-# clip value 
+# clip value to avoid taking log of 0 
 clip_value = 1e-8
 
 def sigmoid(x):
+	'''
+	Compute the elementwise sigmoid activation of matrix x
+	'''
 	return 1 / (1 + np.exp(-x))
 
 def compute_L_G(A, P):
 	
-	# clip to avoid error
-	A_array = A.toarray()
+	'''
+	compute likelihood of observing adjacacy matrix A
+	'''
 	
-	return -(A_array *  np.log(P) + (1 - A_array) * np.log(1 - P)).mean()
-	# return -(A_array *  np.log(P) + (1 - A_array) * np.log(1 - P)).sum()
+	return -(A.multiply(np.log(P)) + 
+		np.log(1 - P) - A.multiply(np.log(1 - P))).mean()
 
 def compute_L_X(X, Q, attribute_type):
 
+	'''
+	compute likelihood of observing attribute matrix X
+	'''
+
 	if attribute_type != "binary":
-		return (0.5 * (X - Q) ** 2).mean()
-		# return (0.5 * (X - Q) ** 2).sum(axis=1).mean()
-		# return (0.5 * (X - Q) ** 2).sum()
+		return (0.5 * np.square(X - Q)).mean()  # for real valued attributes 
 	
-	# clip to avoid error
-	# X_clip = np.clip(X, a_min=clip_value, a_max=1-clip_value)
-	X_array = X.toarray()
-	
-	return -(X_array * np.log(Q) + (1 - X_array) * np.log(1 - Q)).mean()
-	# return -((X * np.log(Q) + (1 - X) * np.log(1 - Q))).sum(axis=1).mean()
-	# return -(X_array * np.log(Q) + (1 - X_array) * np.log(1 - Q)).sum()
+	# binary attributes
+	return -(X.multiply(np.log(Q)) + 
+		np.log(1 - Q) - X.multiply(np.log(1 - Q))).mean()
 
 def compute_likelihood(A, X, N, K, R, thetas, M, W, lamb_F, lamb_W, alpha, attribute_type):
 	
+	'''
+	compute overall likelood of observing A and X, weighted by alpha
+	also includes l1 penalty on F and W
+	'''
+
 	_, h = hyperbolic_distance(R, thetas, M)
 	F = compute_F(h, M)
 	P = compute_P(F)
@@ -63,17 +69,17 @@ def compute_likelihood(A, X, N, K, R, thetas, M, W, lamb_F, lamb_W, alpha, attri
 	# likelihood of G
 	L_G = compute_L_G(A, P)
 
-	# l1 penalty term
+	# l1 penalty term for matrix F
 	l1_F = lamb_F * np.linalg.norm(F, axis=0, ord=1).sum()
 
+	# append columns of ones as C+1th column of W is the bias term
 	F = np.column_stack([F, np.ones(N)])
-
 	Q = compute_Q(F, W, attribute_type)
 	
 	# likelihood of X
 	L_X = compute_L_X(X, Q, attribute_type)
 	
-	# l1
+	# l1 penalty on W
 	l1_W = lamb_W * np.linalg.norm(W, axis=0, ord=1).sum()
 	
 	# overall likelihood
@@ -82,9 +88,11 @@ def compute_likelihood(A, X, N, K, R, thetas, M, W, lamb_F, lamb_W, alpha, attri
 	return L_G, L_X, l1_F, l1_W, likelihood
 
 def hyperbolic_distance(R, thetas, M):
-	delta_theta = np.pi - abs(np.pi - abs(thetas[:,None] - M[:,1]))
-	# x = np.cosh(R[:,None]) * np.cosh(M[:,0]) - np.sinh(R[:,None]) * np.sinh(M[:,0]) * np.cos(delta_theta)
-	# h = np.arccosh(x)
+	'''
+	computes hyperbolic distance between nodes gievn as (R, thetas)
+	and communities given as (M[0], M[1])
+	'''
+	delta_theta = np.pi - abs(np.pi - abs(thetas - M[1]))
 	if (delta_theta / 2 < 0).any():
 		print "2nfgoewrngoe"
 		i, j = np.where(delta_theta / 2 < 0)
@@ -93,50 +101,47 @@ def hyperbolic_distance(R, thetas, M):
 		print thetas[i]
 		print delta_theta[i]
 		return
-	h = R[:,None] + M[:,0] + 2 * np.log(delta_theta / 2)
+	# relaxation of hyperbolic law of cosines
+	h = R + M[0] + 2 * np.log(delta_theta / 2)
 	return delta_theta, h
-# MINOR CHANGE
-# def hyperbolic_distance_u(u, R, thetas, M):
-# 	delta_theta_u = np.pi - abs(np.pi - abs(thetas[u] - M[:,1]))
-# 	x_u = np.cosh(R[u]) * np.cosh(M[:,0]) - np.sinh(R[u]) * np.sinh(M[:,0]) * np.cos(delta_theta_u)
-# 	h_u = np.arccosh(x_u)
-# 	return delta_theta_u, x_u, h_u
-
-# def hyperbolic_distance_c(c, R, thetas, M):
-# 	delta_theta_c = np.pi - abs(np.pi - abs(thetas - M[c,1]))
-# 	x_c = np.cosh(R) * np.cosh(M[c,0]) - np.sinh(R) * np.sinh(M[c,0]) * np.cos(delta_theta_c)
-# 	h_c = np.arccosh(x_c)
-# 	return delta_theta_c, x_c, h_c
 
 def compute_F(h, M):
-	F = np.exp(- h ** 2 / (2 * M[:,2] ** 2))
+	'''
+	compute F matrix from hyperbolic distances h and M
+	'''
+	F = np.exp(- np.square(h) / (2 * np.square(M[2])))
 	# F = 1 / np.sqrt(2 * np.pi * M[:, 2] ** 2) * F
 	return F
 
-# def compute_F_u(h_u, M):
-# 	F_u = np.exp(- h_u ** 2 / (2 * M[:,2] ** 2))
-# 	return F_u
-
-# def compute_F_c(c, h_c, M):
-# 	F_c = np.exp(- h_c ** 2 / (2 * M[c,2] ** 2))
-# 	return F_c
-
 def compute_P(F):
+	'''
+	compute probabilities of connections bwteeen all nodes
+	'''
 	P = 1 - np.exp(-F.dot(F.T))
 	return np.clip(P, a_min=clip_value, a_max=1-clip_value)
 
 def compute_P_u(u, F):
+	'''
+	only compute uth row of P
+	'''
 	P_u = 1 - np.exp(-F[u].dot(F.T))
 	return np.clip(P_u, a_min=clip_value, a_max=1-clip_value)
 
 def compute_Q(F, W, attribute_type):
+	'''
+	compute probability of nodes possessing attributes
+	'''
 	Q = F.dot(W.T)
 	if attribute_type != "binary":
 		return Q
+	# if we have binary attributes, then we should apply sigmoid transformation 
 	Q = sigmoid(Q)
 	return np.clip(Q, a_min=clip_value, a_max=1-clip_value)
 
 def compute_Q_u(F_u, W, attribute_type):
+	'''
+	uth row of Q
+	'''
 	Q_u = F_u.dot(W.T)
 	if attribute_type != "binary":
 		return Q_u
@@ -144,6 +149,9 @@ def compute_Q_u(F_u, W, attribute_type):
 	return np.clip(Q_u, a_min=clip_value, a_max=1-clip_value)
 
 def compute_Q__k(F, W__k, attribute_type):
+	'''
+	kth column of Q
+	'''
 	Q__k = F.dot(W__k)
 	if attribute_type != "binary":
 		return Q__k
@@ -151,86 +159,74 @@ def compute_Q__k(F, W__k, attribute_type):
 	return np.clip(Q__k, a_min=clip_value, a_max=1-clip_value)
 
 def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_type):
-	
-	# compute F
+
+	'''
+	compute update for angular coo-ordinate of node u
+
+	'''
+
+	# prelimaries to compute uth row of P matrix	
 	delta_theta, h = hyperbolic_distance(R, thetas, M)
 	F = compute_F(h, M)
 	P_u = compute_P_u(u, F)
+
 	
-	# partial delta theta partial theta
-	# partial_delta_theta_u_partial_theta_u = np.array([-np.sign(np.pi - abs(thetas[u] - M[c,1])) *\
-	#  -np.sign(thetas[u] - M[c,1]) * 1 for c in range(C)])
-	partial_delta_theta_u_partial_theta_u = -np.sign(np.pi - abs(thetas[u] - M[:,1])) *\
-	 -np.sign(thetas[u] - M[:,1]) * 1 
-	
-	# parital h partial theta
-	# partial_x_u_partial_delta_theta_u = np.diag([np.sinh(R[u]) * np.sinh(M[c,0]) * np.sin(delta_theta[u,c])
-	# 	for c in range(C)])
-	# partial_x_u_partial_delta_theta_u = np.diag(nap.sinh(R[u]) * np.sinh(M[:,0]) * np.sin(delta_theta[u,:]))
+	# compute derivative of delta theta with respect to theta
+	partial_delta_theta_u_partial_theta_u = np.multiply(-np.sign(np.pi - abs(thetas[u] - M[1])),
+	 -np.sign(thetas[u] - M[1])).T
 
-	# partial_h_u_partial_x_u = np.diag([1 / np.sqrt(x[u, c] ** 2 - 1) for c in range(C)])
-	# partial_h_u_partial_x_u = np.diag(1 / np.sqrt(x[u, :] ** 2 - 1))
-	 
-	# partial F partial theta
-	# partial_F_u_partial_h_u = np.diag([-h[u, c] / M[c,2] ** 2 * F[u, c]
-	# 	for c in range(C)])
-	# partial_F_u_partial_h_u = np.diag(-h[u, :] / M[:, 2] ** 2 * F[u, :])
+	'''
+	derivative of uth row of F with repect to delta theta
+	multiply dF_uc/dh_uc with dh_uc/delta_theta_uc and ocnvert to 
+	sparse diagonal matrix 
+	'''
 
-	# partial_F_u_partial_delta_theta_u = sp.sparse.diags(-h[u, :] / M[:, 2] ** 2 * F[u, :] *
-	# 	1 / np.sqrt(x[u, :] ** 2 - 1) * 
-	# 	np.sinh(R[u]) * np.sinh(M[:,0]) * np.sin(delta_theta[u,:]))
+	partial_F_u_partial_delta_theta_u = np.multiply(np.multiply(-h[u] / np.square(M[2]), 
+		F[u, :]), 4 / delta_theta[u])
+	partial_F_u_partial_delta_theta_u = sp.sparse.spdiags(partial_F_u_partial_delta_theta_u, 0,
+		partial_F_u_partial_delta_theta_u.shape[1], partial_F_u_partial_delta_theta_u.shape[1])
 
-	partial_F_u_partial_delta_theta_u = sp.sparse.diags(-h[u, :] / M[:, 2] ** 2 * F[u, :] *
-		4 / delta_theta[u])
+	'''
+	derivative of uth row of P with respect to uth row of F
 
-	# partial_P_u_partial_F_u = np.array([[F[v, c] * np.exp(-F[u].dot(F[v])) for c in range(C)]
-	# 	for v in range(N)])
-	partial_P_u_partial_F_u = np.exp(-F[u].dot(F.T))[:,None] * F
+	dP_uv/dF_uc = exp(-F_u F_v) * F_vc
+
+	'''
+	partial_P_u_partial_F_u = np.multiply(np.exp(-F[u].dot(F.T)).T, F)
 	
 	# partial L_G 
-	# A_u = A[u].toarray().flatten()
 	A_u = A[u]
-	# partial_L_G_u_partial_P_u = 1.0 / N *\
 	partial_L_G_u_partial_P_u = - 1.0 / N * \
 	(A_u / P_u - 1 / (1 - P_u) + A_u / (1 - P_u))
-	# np.array([A[u, v] / P[u, v] - (1 - A[u, v]) / (1 - P[u, v])
-	# 	for v in range(N)])
+
+	# dot products to combine partial derivatives
 
 	partial_L_G_u_partial_F_u = partial_L_G_u_partial_P_u\
 	.dot(partial_P_u_partial_F_u)
-	# partial_L_G_u_partial_F_u = partial_L_G_u_partial_P_u *\
-	# partial_P_u_partial_F_u
 
 	partial_F_u_partial_theta_u = partial_F_u_partial_delta_theta_u\
 	.dot(partial_delta_theta_u_partial_theta_u)
-	norm = sp.linalg.norm(partial_F_u_partial_theta_u)
+	# norm = sp.linalg.norm(partial_F_u_partial_theta_u)
 	# print norm 
-	if norm > 1:
-		partial_F_u_partial_theta_u /= norm
-
-	# partial_F_u_partial_theta_u = partial_F_u_partial_h_u\
-	# .dot(partial_h_u_partial_x_u)\
-	# .dot(partial_x_u_partial_delta_theta_u)\
-	# .dot(partial_delta_theta_u_partial_theta_u)
+	# if norm > 1:
+	# 	partial_F_u_partial_theta_u /= norm
 
 	partial_L_G_u_partial_theta_u = partial_L_G_u_partial_F_u\
 	.dot(partial_F_u_partial_theta_u)
 
+	# derivative of abs(F_u) is sign(F_u)
 	partial_l1_F_u_partial_F_u = np.sign(F[u])
 
 	# partial L_X
-	F_u = np.append(F[u], 1)
-	Q_u = compute_Q_u(F_u, W, attribute_type)
-	# partial_L_X_u_partial_Q_u = 1.0 / K * np.array([X[u,k] / Q_u[k] -\
-	# 	(1 - X[u, k]) / (1 - Q_u[k]) for k in range(K)])
-	# partial_Q_u_partial_F_u = np.array([[Q_u[k] * (1 - Q_u[k]) * W[k, c] 
-	# 	for c in range(C)] for k in range(K)])
-	# partial_L_X_u_partial_F_u = partial_L_X_u_partial_Q_u.dot(partial_Q_u_partial_F_u)
+	F = np.append(F[u], np.matrix(1), axis=1)
+	Q_u = compute_Q_u(F, W, attribute_type)
 
-	# partial_L_X_u_partial_F_u  = 1.0 / K *\
-	partial_L_X_u_partial_F_u = - 1.0 / N * \
+	'''
+	dL_X / d_F_uc = (X_u - Q_u).dot(W__c)
+	'''
+
+	partial_L_X_u_partial_F_u = - 1.0 / N *\
 	(X[u] - Q_u).dot(W[:,:-1])
-	# np.array([(X[u] - Q_u).dot(W[:,c]) for c in range(C)])
 
 	partial_L_X_u_partial_theta_u = partial_L_X_u_partial_F_u.dot(partial_F_u_partial_theta_u)
 
@@ -274,163 +270,88 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 	# 		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1
 
 	return ((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
-		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1
+		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u))
 
-# def compute_delta_theta(N, C, K, A, X, R, thetas, M, W, alpha, lamb_F):
-	
-# 	# compute F
-# 	delta_theta = np.pi - abs(np.pi - abs(thetas[:,None] - M[:,1]))
-# 	x = np.cosh(R[:,None]) * np.cosh(M[:,0]) - np.sinh(R[:,None]) * np.sinh(M[:,0]) * np.cos(delta_theta)
-# 	h = np.arccosh(x)
-# 	F = np.exp(- h ** 2 / (2 * M[:,2] ** 2))
-# 	P = 1 - np.exp(-F.dot(F.T))
-	
-# 	# partial delta theta partial theta
-# 	partial_delta_theta_partial_theta = np.array([[[-np.sign(np.pi - abs(thetas[u] - M[c,1])) *\
-# 	 -np.sign(thetas[u] - M[c,1]) * 1 if u_prime == u else 0\
-# 	 for u_prime in range(N)] for c in range(C)] for u in range(N)])
-	
-# 	# partial h partial theta
-# 	partial_x_partial_delta_theta = np.array([[[[np.sinh(R[u]) * np.sinh(M[c,0]) * np.sin(delta_theta[u,c])\
-# 		if u_prime==u and c_prime==c else 0\
-# 		for c_prime in range(C)] for u_prime in range(N)] for c in range(C)] for u in range(N)])
-
-# 	partial_h_partial_x = np.array([[[[1 / np.sqrt(x[u, c] ** 2 - 1) if u_prime==u and c_prime==c else 0\
-# 		for c_prime in range(C)] for u_prime in range(N)] for c in range(C)] for u in range(N)])
-	 
-# 	# partial F partial theta
-# 	partial_F_partial_h = np.array([[[[-h[u, c] / M[c,2] ** 2 * F[u, c] if u_prime==u and c_prime==c else 0\
-# 		for c_prime in range(C)] for u_prime in range(N)] for c in range(C)] for u in range(N)])
-
-# 	partial_P_partial_F = np.array([[[[F[v, c] * np.exp(-F[u].dot(F[v]))\
-# 	 if u_prime==u else F[u, c] * np.exp(-F[u].dot(F[v])) if u_prime==v else 0\
-# 		for c in range(C)] for u_prime in range(N)] for v in range(N)] for u in range(N)])
-	
-# 	# partial L_G
-# 	partial_L_G_partial_P = 1 / N**2 *np.array([[A[u,v] / P[u,v] - (1 - A[u,v]) / (1 - P[u,v])\
-# 		for v in range(N)] for u in range(N)])
-
-# 	partial_L_G_partial_F = np.tensordot(partial_L_G_partial_P,\
-# 	partial_P_partial_F)
-
-# 	partial_F_partial_theta = np.tensordot(np.tensordot(np.tensordot(partial_F_partial_h,\
-# 	partial_h_partial_x),\
-# 	partial_x_partial_delta_theta),\
-# 	partial_delta_theta_partial_theta)
-
-# 	partial_L_G_u_partial_theta_u = np.tensordot(partial_L_G_partial_F,\
-# 	partial_F_partial_theta)
-
-# 	partial_l1_F_partial_F = np.sign(F)
-
-# 	# partial L_X
-# 	F = np.column_stack([F, np.ones(N)])
-# 	Q = compute_Q(N, F, W)
-# 	partial_L_X_partial_Q = 1 / (N*K) * np.array([[X[u, k] / Q[u, k] - (1 - X[u,k]) / (1 - Q[u, k])
-# 		for k in range(K)] for u in range(N)])
-# 	partial_Q_partial_F = np.array([[[[Q[u,k] * (1 - Q[u,k]) * W[k, c] if u_prime==u else 0
-# 		for c in range(C)] for u_prime in range(N)] for k in range(K)] for u in range(N)])
-# 	partial_L_X_partial_F = np.tensordot(partial_L_X_partial_Q, partial_Q_partial_F)
-
-# 	partial_L_X_partial_theta = np.tensordot(partial_L_X_partial_F, partial_F_partial_theta)
-
-# 	return (1 - alpha) * partial_L_G_partial_theta + alpha * partial_L_X_partial_theta\
-# 		- lamb_F * np.tensordot(partial_l1_F_partial_F, partial_F_partial_theta)
 
 def compute_partial_P_partial_F_c(c, N, A, P, F):
 
-	partial_P_partial_F_c = sp.sparse.lil_matrix((N**2, N))
+	'''
+	helper function to compute 3-dimension tensor representing dP/d_F_c
+	(here represented as 2d sparse matrix of size (N**2, N))
 
+	
+					 exp(-F_u F_v) * F_uc if u' == v	
+	dp_uv/df_u'c = { exp(-F_u F_v) * F_vc if u' == u
+					 0 otherwise
+
+	'''
+
+	partial_P_partial_F_c = sp.sparse.lil_matrix((N, N**2))
+	'''
+	matrices U, and V represent all the us and vs repspectively 
+	'''
 	U = np.repeat(np.arange(N), 2*N)
 	V = np.tile(np.repeat(np.arange(N), 2), N)
-	U_even = U[np.arange(U.shape[0]) % 2 == 0]
-	V_even = V[np.arange(V.shape[0]) % 2 == 0]
+	U_prime = np.column_stack([np.repeat(np.arange(N), N), np.tile(np.arange(N), N)])
+
+	# U_even = U[np.arange(U.shape[0]) % 2 == 0]
+	# V_even = V[np.arange(V.shape[0]) % 2 == 0]
+	# store exp(-F_u F_v) for all u, v
 	exp = np.exp(-F.dot(F.T))
 
-	partial_P_partial_F_c[U * N + V, np.column_stack([U_even, V_even]).flatten()] = \
-	F[np.column_stack([V_even, U_even]).flatten(), c] * exp[U, V]
+	partial_P_partial_F_c[U_prime.reshape(-1,), U * N + V] = \
+	np.multiply(F[U_prime[:,::-1].reshape(1, -1), c], exp[U, V])
 
 	return sp.sparse.csr_matrix(partial_P_partial_F_c)
 
 def update_community_r_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribute_type):
 	
+	'''
+	compute update for radial coordinate of community c
+	'''
 	# compute F
 	delta_theta, h = hyperbolic_distance(R, thetas, M)
 	F = compute_F(h, M)
 	P = compute_P(F)
 
-	# partial h
-	# partial_x_c_partial_r_c = np.array([np.cosh(R[u]) * np.sinh(M[c, 0]) -\
-	# 				  np.sinh(R[u]) * np.cosh(M[c, 0]) * np.cos(delta_theta[u, c]) for u in range(N)])
-	# partial_x_c_partial_r_c = np.cosh(R) * np.sinh(M[c, 0]) -\
-	# 				  np.sinh(R) * np.cosh(M[c, 0]) * np.cos(delta_theta[:, c])
+	'''
+	dh_uc / d_rc = 1
+	'''
 
-	partial_h_c_partial_r_c = np.ones(N)
+	partial_h_c_partial_r_c = np.matrix(np.ones((N, 1)))
 
-	# partial_h_c_partial_x_c = np.diag([1 / np.sqrt(x[u, c] ** 2 - 1) for u in range(N)])
-	# partial_h_c_partial_x_c = np.diag(1 / np.sqrt(x[:, c] ** 2 - 1))
-	
-	# partial F
-	# partial_F_c_partial_h_c = np.diag([ - h[u, c] / M[c, 2] ** 2 * F[u, c] for u in range(N)]) 
-	# partial_F_c_partial_h_c = np.diag(-h[:, c] / M[c, 2] ** 2 * F[:, c]) 
+	'''
+	dF_uc / dh_u'c = -h_uc / sd_c ** 2 * F_uc if u' == u 
 
-	# partial_F_c_partial_x_c = sp.sparse.diags(-h[:, c] / M[c, 2] ** 2 * F[:, c] * 
-	# 	1 / np.sqrt(x[:, c] ** 2 - 1))
+	'''
+	partial_F_c_partial_h_c = np.multiply(-h[:, c] / np.square(M[2, c]), F[:,c]).T
 
-	partial_F_c_partial_h_c = sp.sparse.diags(-h[:, c] / M[c, 2] ** 2 * F[:, c])
-	
-	# partial L_G TODO
-	# partial_P_partial_F_c = np.array([[[F[v, c] * np.exp( - F[u].dot(F[v])) if u_prime == u\
-	# else F[u, c] * np.exp( - F[u].dot(F[v])) if u_prime == v else 0\
-	# for u_prime in range(N)] for v in range(N)] for u in range(N)])
+	partial_F_c_partial_h_c = sp.sparse.spdiags(partial_F_c_partial_h_c, 0,
+		partial_F_c_partial_h_c.shape[1], partial_F_c_partial_h_c.shape[1])
 
-	# partial_P_partial_F_c = np.zeros((N, N, N))
-	# U = np.repeat(np.arange(N), 2*N)
-	# V = np.tile(np.repeat(np.arange(N), 2), N)
-	# U_even = U[np.arange(U.shape[0]) % 2 == 0]
-	# V_even = V[np.arange(V.shape[0]) % 2 == 0]
-	# exp = np.exp(-F.dot(F.T))
-	# partial_P_partial_F_c[U, V, np.column_stack([U_even, V_even]).flatten()] =\
-	# F[np.column_stack([V_even, U_even]).flatten(), c] * exp[U, V]
-
-	# partial_L_G_partial_P = 1.0 / N**2 * \
-	# partial_L_G_partial_P = 1.0 / N *\
-	# (A / P - (1 - A.todense()) / (1 - P))
-	# np.array([[A[u,v] / P[u,v] - (1 - A[u,v]) / (1 - P[u,v])\
-	# 	for v in range(N)] for u in range(N)])
-
-	# partial_L_G_c_partial_F_c = np.tensordot(partial_L_G_partial_P, partial_P_partial_F_c)
+	'''
+	dL_G / d_P_uv = A_uv / P_uv - (1 - A_uv) / (1 - P_uv)
+	reshape into row matrix (1, N**2) for easy dot product with shape (N**2, N)
+	'''
 	
 	partial_L_G_partial_P = - 1.0 / N * \
 	(A / P - 1 / (1 - P) + A / (1 - P)).reshape(1, -1)
 
 	partial_P_partial_F_c = compute_partial_P_partial_F_c(c, N, A, P, F)
-
-	partial_L_G_c_partial_F_c = partial_L_G_partial_P * partial_P_partial_F_c
-
-	# partial_F_c_partial_r_c = partial_F_c_partial_h_c\
-	# .dot(partial_h_c_partial_x_c)\
-	# .dot(partial_x_c_partial_r_c)
-	# partial_F_c_partial_r_c = partial_F_c_partial_x_c.dot(partial_x_c_partial_r_c)
+	partial_L_G_c_partial_F_c = partial_P_partial_F_c.multiply(partial_L_G_partial_P).sum(axis=1).T
+	
 	partial_F_c_partial_r_c = partial_F_c_partial_h_c.dot(partial_h_c_partial_r_c)
-
 	partial_L_G_c_partial_r_c = partial_L_G_c_partial_F_c.dot(partial_F_c_partial_r_c)
 
-	partial_l1_F_c_partial_F_c = np.sign(F[:,c])
+	# derivative of abs is sign
+	partial_l1_F_c_partial_F_c = np.sign(F[:,c]).T
 	
 	# partial L_x 
 	F = np.column_stack([F, np.ones(N)])
 	Q = compute_Q(F, W, attribute_type)
 
-	# partial_L_X_c_partial_Q = 1.0 / (N*K) * np.array([[X[u, k] / Q[u, k] - (1 - X[u, k]) / (1 - Q[u, k])\
-	# 	for k in range(K)] for u in range(N)])
-	# partial_Q_partial_F_c = np.array([[[Q[u,k] * (1 - Q[u,k]) * W[k,c] if u_prime == u else 0\
-	# 	for u_prime in range(N)] for k in range(K)] for u in range(N)])
-	# partial_L_X_c_partial_F_c = np.tensordot(partial_L_X_c_partial_Q, partial_Q_partial_F_c)
-
-	# partial_L_X_c_partial_F_c = 1.0 / (N * K) *\ 
 	partial_L_X_c_partial_F_c = - 1.0 / N * \
-	(X - Q).dot(W[:,c])
+	(X - Q).dot(W[:,c]).T
 	# np.array([(X[u] - Q[u]).dot(W[:,c]) for u in range(N)])
 
 	partial_L_X_c_partial_r_c = partial_L_X_c_partial_F_c.dot(partial_F_c_partial_r_c)
@@ -440,7 +361,7 @@ def update_community_r_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribut
 	#  + lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_r_c)).A1
 
 	return ((1 - alpha) * partial_L_G_c_partial_r_c + alpha * partial_L_X_c_partial_r_c\
-	 + lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_r_c)).A1
+	 + lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_r_c))
 
 def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribute_type):
 	
@@ -477,7 +398,7 @@ def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attr
 
 	# print partial_F_c_partial_theta_c
 
-	norm = sp.linalg.norm(partial_F_c_partial_theta_c)
+	# norm = sp.linalg.norm(partial_F_c_partial_theta_c)
 	# print norm
 	# if norm > 1:
 	# 	partial_F_c_partial_theta_c /= norm
@@ -543,7 +464,7 @@ def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attr
 	# 	+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c)).A1
 
 	return ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
-		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c)).A1
+		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c))
 
 def update_community_sd_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribute_type):
 	
@@ -612,7 +533,7 @@ def update_community_sd_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribu
 	# 	+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_sd_c)).A1
 
 	return ((1 - alpha) * partial_L_G_c_partial_sd_c + alpha * partial_L_X_c_partial_sd_c\
-		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_sd_c)).A1
+		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_sd_c))
 
 
 def update_W_k(k, N, K, C, X, W, F, lamb_W, alpha, attribute_type):
@@ -623,7 +544,7 @@ def update_W_k(k, N, K, C, X, W, F, lamb_W, alpha, attribute_type):
 	# print W_k
 	
 	# kth column of Q
-	Q__k = compute_Q__k(F, W_k, attribute_type)
+	Q__k = compute_Q__k(F, W_k.T, attribute_type)
 	# Q = compute_Q(F, W, attribute_type)
 
 	# partial_L_X_k_partial_Q_k = 1.0 / N * np.array([X[u, k] / Q[u, k] - (1 - X[u, k]) / (1 - Q[u, k])
@@ -634,7 +555,7 @@ def update_W_k(k, N, K, C, X, W, F, lamb_W, alpha, attribute_type):
 
 	# partial_L_X_k_partial_W_k = 1.0 / N *\
 	partial_L_X_k_partial_W_k = - 1.0 / N * \
-	(X.T[k] - Q__k).dot(F)
+	(X.T[k] - Q__k.T).dot(F)
 	# print partial_L_X_k_partial_W_k.shape
 	# np.array([(X[:, k] - Q__k).dot(F[:, c]) for c in range(C + 1)])
 
@@ -642,10 +563,14 @@ def update_W_k(k, N, K, C, X, W, F, lamb_W, alpha, attribute_type):
 	# print partial_L_X_k_partial_W_k 
 
 	partial_l1_W_k_partial_W_k = np.sign(W_k)
-	
-	# print (alpha * partial_L_X_k_partial_W_k - lamb_W * partial_l1_W_k_partial_W_k).A1
+	# print X.T[k].T.shape
+	# print Q__k.shape
+	# print (X.T[k] - Q__k).shape
+	# print partial_L_X_k_partial_W_k.shape
+	# print partial_l1_W_k_partial_W_k.shape
+	# print (alpha * partial_L_X_k_partial_W_k - lamb_W * partial_l1_W_k_partial_W_k).shape
 
-	return (alpha * partial_L_X_k_partial_W_k + lamb_W * partial_l1_W_k_partial_W_k).A1
+	return (alpha * partial_L_X_k_partial_W_k + lamb_W * partial_l1_W_k_partial_W_k)
 
 def estimate_T():
 	'''
@@ -692,7 +617,7 @@ def preprocess_G(gml_file, gamma, T):
 
 	# determine radial coordinates of nodes
 	R = 2 * beta * np.log(range(1, N + 1)) + 2 * (1 - beta) * np.log(N) 
-	R = R[order_of_appearance]
+	R = np.matrix(R[order_of_appearance]).T
 
 	# observed adjacency matrix
 	A = nx.adjacency_matrix(G)
@@ -717,20 +642,20 @@ def initialize_matrices(L, N, C, K, R):
 	community_radii = R.mean()
 	noise = 1e-2
 	# community matrix M
-	M = np.zeros((C, 3))
+	M = np.matrix(np.zeros((3, C)))
 	# centre radii
-	M[:,0] = np.random.normal(size=(C,), loc=community_radii, scale=noise)
+	M[0] = np.random.normal(size=(1, C), loc=community_radii, scale=noise)
 	# center angular coordinate
-	M[:,1] = np.random.rand(C) * 2 * np.pi
+	M[1] = np.random.rand(1, C) * 2 * np.pi
 	# M[:,1] = np.random.normal(size=(C,), scale=1e-2)
 	# M[:,1] = np.random.normal(loc = np.arange(C) * 2 * np.pi / C, scale=noise)
 	# M[:,1] -= M[:,1].mean()
 	# community standard deviations
-	M[:,2] = np.random.normal(size=(C,), loc=sigma, scale=noise)
+	M[2] = np.random.normal(size=(1, C), loc=sigma, scale=noise)
 
 
 	# initialise logistic weights
-	W = np.random.normal(size=(K, C + 1), scale=noise)
+	W = np.matrix(np.random.normal(size=(K, C + 1), scale=noise))
 	# W = np.random.uniform(low=-1/np.sqrt(C+1), high=1/np.sqrt(C+1), size=(K, C+1))
 
 	# h = np.sqrt(-2 * sigma ** 2 * np.log( np.sqrt( -np.log(0.5) / C)))
@@ -746,7 +671,7 @@ def initialize_matrices(L, N, C, K, R):
 
 	u, V = sp.sparse.linalg.eigsh(L, k=3, which="LM", sigma=0)
 	thetas = np.arctan2(V[:,2], V[:,1])
-	thetas = thetas.argsort() * 2 * np.pi / N
+	thetas = np.matrix(thetas.argsort() * 2 * np.pi / N).T
 
 	# kmeans = KMeans(n_clusters=C)
 	# kmeans.fit(thetas.reshape(-1,1))
@@ -781,7 +706,8 @@ def initialize_matrices(L, N, C, K, R):
 
 def train(A, X, N, K, C, R, thetas, M, W, 
 	eta=1e-2, alpha=0.5, lamb_F=1e-2, lamb_W=1e-2, 
-	num_processes=None, num_epochs=0, true_communities=None, attribute_type="binary"):
+	num_processes=None, num_epochs=0, true_communities=None, 
+	attribute_type="binary", plot_directory=None):
 
 	L_G, L_X, l1_F, l1_W, loss = compute_likelihood(A, X, N, K, R, thetas, M, W, 
 		lamb_F=lamb_F, lamb_W=lamb_W, alpha=alpha, attribute_type=attribute_type)
@@ -800,26 +726,26 @@ def train(A, X, N, K, C, R, thetas, M, W,
 		if num_processes is None:
 			
 			# print "thetas"
-			for u in np.random.permutation(N):
-				thetas[u] -= eta * update_theta_u(u, N, K, C, A, X, R,
-					thetas, M, W, alpha, lamb_F, attribute_type)
-				thetas[u] = thetas[u] % (2 * np.pi)
+			# for u in np.random.permutation(N):
+			# 	thetas[u] -= eta * update_theta_u(u, N, K, C, A, X, R,
+			# 		thetas, M, W, alpha, lamb_F, attribute_type)
+			# 	thetas[u] = thetas[u] % (2 * np.pi)
 
 			# print "r"
 			for c in np.random.permutation(C):
-				M[c, 0] -= eta * update_community_r_c(c, N, K, A, X, R,
+				M[0, c] -= eta * update_community_r_c(c, N, K, A, X, R,
 					thetas, M, W, alpha, lamb_F, attribute_type)
 
-			# print "community thetas"
-			for c in np.random.permutation(C):
-				M[c, 1] -= eta * update_community_theta_c(c, N, K, A, X, R,
-					thetas, M, W, alpha, lamb_F, attribute_type)
-				M[c, 1] = M[c, 1] % (2 * np.pi)
+			# # # print "community thetas"
+			# for c in np.random.permutation(C):
+			# 	M[1, c] -= eta * update_community_theta_c(c, N, K, A, X, R,
+			# 		thetas, M, W, alpha, lamb_F, attribute_type)
+			# 	M[1, c] = M[c, 1] % (2 * np.pi)
 
-			# print "sd"
-			for c in np.random.permutation(C):
-				M[c, 2] -= eta * update_community_sd_c(c, N, K, A, X, R,
-					thetas, M, W, alpha, lamb_F, attribute_type)
+			# # # print "sd"
+			# for c in np.random.permutation(C):
+			# 	M[2, c] -= eta * update_community_sd_c(c, N, K, A, X, R,
+			# 		thetas, M, W, alpha, lamb_F, attribute_type)
 
 		else:
 			delta_thetas = np.concatenate(pool.map(partial(update_theta_u, 
@@ -882,7 +808,7 @@ def train(A, X, N, K, C, R, thetas, M, W,
 		
 		_, h = hyperbolic_distance(R, thetas, M)
 		F = compute_F(h, M)
-		community_predictions = F.argmax(axis=1)
+		community_predictions = F.argmax(axis=1).A1
 		F = np.column_stack([F, np.ones(N)])
 
 		# stdout.write("F=\n")
@@ -929,7 +855,7 @@ def train(A, X, N, K, C, R, thetas, M, W,
 			# NMI
 			stdout.write("NMI: {}\n".format(NMI(true_communities, community_predictions)))
 
-		draw_network(N, C, R, thetas, M, e, L_G, L_X)
+		draw_network(N, C, R, thetas, M, e, L_G, L_X, plot_directory)
 
 		stdout.flush()
 
@@ -939,23 +865,33 @@ def train(A, X, N, K, C, R, thetas, M, W,
 
 	return thetas, M, W
 
-def draw_network(N, C, R, thetas, M, e, L_G, L_X):
+def draw_network(N, C, R, thetas, M, e, L_G, L_X, plot_directory):
 
 	_, h = hyperbolic_distance(R, thetas, M)
 	F = compute_F(h, M)
-	assignments = F.argmax(axis=1)
-	assignment_strength = np.array([F[i, assignments[i]] for i in range(N)])
+	assignments = F.argmax(axis=1).A1
+	assignment_strength = F[np.arange(N), assignments].A1
 
-	node_cartesian = np.column_stack([R * np.cos(thetas), R * np.sin(thetas)])
-	community_cartesian = np.column_stack([M[:,0] * np.cos(M[:,1]), M[:,0] * np.sin(M[:,1])])
+	# print assignment_strength
+
+	node_cartesian = np.column_stack([np.multiply(R, np.cos(thetas)),
+	np.multiply(R, np.sin(thetas))])
+	community_cartesian = np.column_stack([np.multiply(M[0], np.cos(M[1])).T, 
+		np.multiply(M[0], np.sin(M[1])).T])
+
+	# print assignments
+	# print C
 
 	plt.figure(figsize=(15, 15))
 	plt.title("Epoch={}, L_G={}, L_X={}".format(e, L_G, L_X))
-	plt.scatter(node_cartesian[:,0], node_cartesian[:,1], c=assignments, s=100*assignment_strength)
-	plt.scatter(community_cartesian[:,0], community_cartesian[:,1], c=np.arange(C), s=100)
-	plt.scatter(community_cartesian[:,0], community_cartesian[:,1], c = "k", s=25)
+	plt.scatter(node_cartesian[:,0].A1, node_cartesian[:,1].A1, 
+		c=assignments, s=100*assignment_strength)
+	plt.scatter(community_cartesian[:,0].A1, community_cartesian[:,1].A1, 
+		c=np.arange(C), s=100)
+	plt.scatter(community_cartesian[:,0].A1, community_cartesian[:,1].A1, 
+		c="k", s=25)
 	# plt.show()
-	plt.savefig("plots/epoch_{}.png".format(e))
+	plt.savefig(os.path.join(plot_directory, "epoch_{}.png".format(e)))
 	plt.close()
 
 def parse_args():
@@ -994,6 +930,9 @@ def parse_args():
 		    help="filepath of trained M matrix (default is \"M.csv\")", default="M.csv")
 	parser.add_argument("--W", dest="W_filepath",
 		    help="filepath of trained W matrix (default is \"W.csv\")", default="W.csv")
+	parser.add_argument("--plot", dest="plot_directory",
+			    help="path of directory to save plots")
+
 
 	args = parser.parse_args()
 
@@ -1033,14 +972,16 @@ def main():
 	true_communities = preprocess_true_communities(nodes, args.true_communities)
 	attribute_type = args.attribute_type
 	num_processes = args.num_processes
+	plot_directory = args.plot_directory
 
 	stdout.write("Training with eta={}, num_epochs={}, lamb_F={}, lamb_W={}, alpha={}, attribute_type={}, num_processes={}\n".format(eta,	
 		num_epochs, lamb_F, lamb_W, alpha, attribute_type, num_processes))
-
+	stdout.write("saving plots to {}\n".format(plot_directory))
 	thetas, M, W = train(A, X, N, K, C, R, thetas, M, W, 
 		eta=eta, lamb_F=lamb_F, lamb_W=lamb_W, alpha=alpha, 
 		num_epochs=num_epochs, true_communities=true_communities, 
-		attribute_type=attribute_type, num_processes=num_processes)
+		attribute_type=attribute_type, num_processes=num_processes,
+		plot_directory=plot_directory)
 
 	stdout.write("Trained matrices\n") 
 

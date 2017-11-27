@@ -3,9 +3,9 @@ import pandas as pd
 import networkx as nx
 import os
 
-def read_graph(edgelist_file):
+def read_graph(dir, edgelist_file):
 
-	G = nx.read_edgelist(edgelist_file)
+	G = nx.read_edgelist(os.path.join(dir, edgelist_file))
 
 	return G
 
@@ -69,8 +69,17 @@ def read_attributes(dir, feature_files, feature_name_files):
 
 	return pd.concat(dfs,).fillna(value=0)
 
-	
+
 def main():
+
+	dir = "facebook"
+	edgelist_file = "0.edges"
+	community_files = [f for f in os.listdir(dir) if re.match("[A-Za-z0-9]*.circles", f)]
+	feature_files = sorted([f for f in os.listdir('./facebook') if re.match("[0-9]+.feat$", f)])
+	feature_name_files = sorted([f for f in os.listdir('./facebook') if re.match("[0-9]+.featnames$", f)])
+	
+	
+
 	return
 
 is __name__ == "__main__":
