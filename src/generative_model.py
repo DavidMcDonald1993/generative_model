@@ -232,7 +232,7 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 
 	if abs(-0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
 			+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1[0]) > np.pi/2:
-		print "TOO BIG"
+		stdout.write("TOO BIG")
 		print u, -0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
 			+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1
 		print
@@ -855,10 +855,6 @@ def main():
 		plot_directory=plot_directory)
 
 	stdout.write("Trained matrices\n") 
-
-	# draw_network(N, C, R, thetas, M)
-	
-	# stdout.write("Visualised network\n")
 
 	thetas = pd.DataFrame(thetas)
 	M = pd.DataFrame(M)
