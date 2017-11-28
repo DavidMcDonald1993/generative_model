@@ -175,6 +175,10 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 	partial_delta_theta_u_partial_theta_u = np.multiply(-np.sign(np.pi - abs(thetas[u] - M[1])),
 	 -np.sign(thetas[u] - M[1])).T
 
+	# norm = np.linalg.norm(partial_delta_theta_u_partial_theta_u)
+	# if norm > 1:
+	# 	partial_delta_theta_u_partial_theta_u /= norm
+
 	'''
 	derivative of uth row of F with repect to delta theta
 	multiply dF_uc/dh_uc with dh_uc/delta_theta_uc and ocnvert to 
@@ -183,6 +187,9 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 
 	partial_F_u_partial_delta_theta_u = np.multiply(np.multiply(-h[u] / np.square(M[2]), 
 		F[u, :]), 4 / delta_theta[u])
+	# norm = np.linalg.norm(partial_F_u_partial_delta_theta_u)
+	# if norm > 1:
+	# 	partial_F_u_partial_delta_theta_u /= norm
 	partial_F_u_partial_delta_theta_u = sp.sparse.spdiags(partial_F_u_partial_delta_theta_u, 0,
 		partial_F_u_partial_delta_theta_u.shape[1], partial_F_u_partial_delta_theta_u.shape[1])
 
@@ -193,11 +200,18 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 
 	'''
 	partial_P_u_partial_F_u = np.multiply(np.exp(-F[u].dot(F.T)).T, F)
-	
+	# norm = np.linalg.norm(partial_P_u_partial_F_u)
+	# if norm > 1:
+	# 	partial_P_u_partial_F_u /= norm
+
+
 	# partial L_G 
 	A_u = A[u]
 	partial_L_G_u_partial_P_u = - 1.0 / N * \
 	(A_u / P_u - 1 / (1 - P_u) + A_u / (1 - P_u))
+	# norm = np.linalg.norm(partial_L_G_u_partial_P_u)
+	# if norm > 1:
+	# 	partial_L_G_u_partial_P_u /= norm
 
 	# dot products to combine partial derivatives
 
@@ -206,16 +220,15 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 
 	partial_F_u_partial_theta_u = partial_F_u_partial_delta_theta_u\
 	.dot(partial_delta_theta_u_partial_theta_u)
-	norm = sp.linalg.norm(partial_F_u_partial_theta_u)
-	# print norm 
-	if norm > 1:
-		partial_F_u_partial_theta_u /= norm
 
 	partial_L_G_u_partial_theta_u = partial_L_G_u_partial_F_u\
 	.dot(partial_F_u_partial_theta_u)
 
 	# derivative of abs(F_u) is sign(F_u)
 	partial_l1_F_u_partial_F_u = np.sign(F[u])
+	# norm = np.linalg.norm(partial_l1_F_u_partial_F_u)
+	# if norm > 1:
+	# 	partial_l1_F_u_partial_F_u /= norm
 
 	# partial L_X
 	F = np.append(F[u], np.matrix(1), axis=1)
@@ -228,49 +241,61 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 	partial_L_X_u_partial_F_u = - 1.0 / N *\
 	(X[u] - Q_u).dot(W[:,:-1])
 
+	# norm = np.linalg.norm(partial_L_X_u_partial_F_u)
+	# if norm > 1:
+	# 	partial_L_X_u_partial_F_u /= norm
+
 	partial_L_X_u_partial_theta_u = partial_L_X_u_partial_F_u.dot(partial_F_u_partial_theta_u)
 
-	if abs(-0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
-			+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1[0]) > np.pi/2:
-		stdout.write("TOO BIG\n")
-		print u, -0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
-			+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1
-		print
-		print delta_theta[u]
-		print 4/delta_theta[u]
-		# print np.sign(np.pi - abs(thetas[u] - M[:,1]))
-		# print np.sign(thetas[u] - M[:,1])
-		# print thetas[u] - M[:,1]
-		# print M
-		# print thetas[u]
-		print 
-		print P_u
-		print 1 / P_u
 
-		print 
-		print partial_delta_theta_u_partial_theta_u
-		print partial_F_u_partial_delta_theta_u
-		print partial_F_u_partial_theta_u
-		# print partial_L_G_u_partial_P_u.min()
-		# # print A_u[0,0]
-		# # print P_u[0]
-		# # print 1 - A_u[0,0]
-		# # print 1 - P_u[0]
-		# print partial_P_u_partial_F_u.min()
-		print partial_L_G_u_partial_F_u
+	grad = ((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
+		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u))
 
-		print partial_L_G_u_partial_theta_u
-		print 
-		print partial_L_X_u_partial_theta_u
-		# return np.sign(-0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
-		# 	+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1[0]) * 0.01
-		return 
+	norm = np.linalg.norm(grad)
 
-	# print -0.01 * ((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
+	if norm > 1:
+		grad /= norm
+
+	# if abs(-0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
+	# 		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1[0]) > np.pi/2:
+	# 	stdout.write("TOO BIG\n")
+	# 	print u, -0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
+	# 		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1
+	# 	print
+	# 	print delta_theta[u]
+	# 	print 4/delta_theta[u]
+	# 	# print np.sign(np.pi - abs(thetas[u] - M[:,1]))
+	# 	# print np.sign(thetas[u] - M[:,1])
+	# 	# print thetas[u] - M[:,1]
+	# 	# print M
+	# 	# print thetas[u]
+	# 	print 
+	# 	print P_u
+	# 	print 1 / P_u
+
+	# 	print 
+	# 	print partial_delta_theta_u_partial_theta_u
+	# 	print partial_F_u_partial_delta_theta_u
+	# 	print partial_F_u_partial_theta_u
+	# 	# print partial_L_G_u_partial_P_u.min()
+	# 	# # print A_u[0,0]
+	# 	# # print P_u[0]
+	# 	# # print 1 - A_u[0,0]
+	# 	# # print 1 - P_u[0]
+	# 	# print partial_P_u_partial_F_u.min()
+	# 	print partial_L_G_u_partial_F_u
+
+	# 	print partial_L_G_u_partial_theta_u
+	# 	print 
+	# 	print partial_L_X_u_partial_theta_u
+	# 	# return np.sign(-0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
+	# 	# 	+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1[0]) * 0.01
+	# 	return 
+
+	# print -1 * ((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
 	# 		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1
 
-	return ((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
-		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u))
+	return grad
 
 
 def compute_partial_P_partial_F_c(c, N, A, P, F):
@@ -301,6 +326,9 @@ def compute_partial_P_partial_F_c(c, N, A, P, F):
 
 	partial_P_partial_F_c[U_prime.reshape(-1,), U * N + V] = \
 	np.multiply(F[U_prime[:,::-1].reshape(1, -1), c], exp[U, V])
+
+	# norm = np.linalg.norm(partial_P_partial_F_c, axis=1)[:,None]
+	# partial_P_partial_F_c /= norm
 
 	return sp.sparse.csr_matrix(partial_P_partial_F_c)
 
@@ -360,8 +388,15 @@ def update_community_r_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribut
 	# print -0.01 * ((1 - alpha) * partial_L_G_c_partial_r_c + alpha * partial_L_X_c_partial_r_c\
 	#  + lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_r_c)).A1
 
-	return ((1 - alpha) * partial_L_G_c_partial_r_c + alpha * partial_L_X_c_partial_r_c\
+	grad = ((1 - alpha) * partial_L_G_c_partial_r_c + alpha * partial_L_X_c_partial_r_c\
 	 + lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_r_c))
+
+	norm = np.linalg.norm(grad)
+
+	if norm > 1:
+		grad /= norm
+
+	return grad
 
 def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribute_type):
 	
@@ -377,6 +412,11 @@ def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attr
 
 	partial_F_c_partial_delta_theta_c = np.multiply(np.multiply(-h[:, c] / np.square(M[2, c]), 
 		F[:,c]), 4 / delta_theta[:,c]).T
+
+	# norm = np.linalg.norm(partial_F_c_partial_delta_theta_c)
+	# if norm > 1:
+	# 	partial_F_c_partial_delta_theta_c /= norm
+
 	partial_F_c_partial_delta_theta_c = sp.sparse.spdiags(partial_F_c_partial_delta_theta_c, 0,
 		partial_F_c_partial_delta_theta_c.shape[1], partial_F_c_partial_delta_theta_c.shape[1])
 	
@@ -406,13 +446,19 @@ def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attr
 	# print -0.01 * ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
 	# 	+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c)).A1
 
-	if 0.01 * ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
-		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c)) > np.pi / 2:
-		stdout.write("TOOBIG COMMUNITY\n")
-		return
+	# if 0.01 * ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
+	# 	+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c)) > np.pi / 2:
+	# 	stdout.write("TOOBIG COMMUNITY\n")
+	# 	return
 
-	return ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
+	grad = ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
 		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c))
+	norm = np.linalg.norm(grad)
+
+	if norm > 1:
+		grad /= norm
+
+	return grad
 
 def update_community_sd_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribute_type):
 	
@@ -449,8 +495,12 @@ def update_community_sd_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attribu
 	# print -0.01 * ((1 - alpha) * partial_L_G_c_partial_sd_c + alpha * partial_L_X_c_partial_sd_c\
 	# 	+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_sd_c)).A1
 
-	return ((1 - alpha) * partial_L_G_c_partial_sd_c + alpha * partial_L_X_c_partial_sd_c\
+	grad = ((1 - alpha) * partial_L_G_c_partial_sd_c + alpha * partial_L_X_c_partial_sd_c\
 		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_sd_c))
+	norm = np.linalg.norm(grad)
+	if norm > 1:
+		grad /= norm
+	return grad
 
 
 def update_W_k(k, N, K, C, X, W, F, lamb_W, alpha, attribute_type):
@@ -487,7 +537,12 @@ def update_W_k(k, N, K, C, X, W, F, lamb_W, alpha, attribute_type):
 	# print partial_l1_W_k_partial_W_k.shape
 	# print (alpha * partial_L_X_k_partial_W_k - lamb_W * partial_l1_W_k_partial_W_k).shape
 
-	return (alpha * partial_L_X_k_partial_W_k + lamb_W * partial_l1_W_k_partial_W_k)
+	grad = alpha * partial_L_X_k_partial_W_k + lamb_W * partial_l1_W_k_partial_W_k
+	norm = np.linalg.norm(grad)
+	if norm > 1:
+		grad /= norm
+
+	return grad
 
 def estimate_T():
 	'''
@@ -653,13 +708,13 @@ def train(A, X, N, K, C, R, thetas, M, W,
 				M[0, c] -= eta * update_community_r_c(c, N, K, A, X, R,
 					thetas, M, W, alpha, lamb_F, attribute_type)
 
-			# # # print "community thetas"
+			# # # # print "community thetas"
 			for c in np.random.permutation(C):
 				M[1, c] -= eta * update_community_theta_c(c, N, K, A, X, R,
 					thetas, M, W, alpha, lamb_F, attribute_type)
 				M[1, c] = M[1, c] % (2 * np.pi)
 
-			# # # print "sd"
+			# # # # print "sd"
 			for c in np.random.permutation(C):
 				M[2, c] -= eta * update_community_sd_c(c, N, K, A, X, R,
 					thetas, M, W, alpha, lamb_F, attribute_type)
@@ -670,9 +725,6 @@ def train(A, X, N, K, C, R, thetas, M, W,
 				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type),
 				range(N)))
 
-			# norm = np.linalg.norm(delta_thetas)
-			# if norm > 1:
-			# 	delta_thetas /= norm
 			thetas -= eta * delta_thetas
 			thetas = thetas % (2 * np.pi)
 
@@ -680,20 +732,12 @@ def train(A, X, N, K, C, R, thetas, M, W,
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
 				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
-			# norm = np.linalg.norm(delta_M)
-			# if norm > 1:
-			# 	delta_M /= norm
-			# print delta_M
 			M[0] -= eta * delta_M
 
 			delta_M = np.concatenate(pool.map(partial(update_community_theta_c, 
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
 				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
-			# norm = np.linalg.norm(delta_M)
-			# if norm > 1:
-			# 	delta_M /= norm
-			# print delta_M
 			M[1] -= eta * delta_M
 			M[1] = M[1] % (2 * np.pi)
 
@@ -701,11 +745,6 @@ def train(A, X, N, K, C, R, thetas, M, W,
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
 				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
-
-			# norm = np.linalg.norm(delta_M)
-			# if norm > 1:
-			# 	delta_M /= norm
-			# print delta_M
 			M[2] -= eta * delta_M
 		
 		_, h = hyperbolic_distance(R, thetas, M)
