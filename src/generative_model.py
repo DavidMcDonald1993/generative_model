@@ -206,10 +206,10 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 
 	partial_F_u_partial_theta_u = partial_F_u_partial_delta_theta_u\
 	.dot(partial_delta_theta_u_partial_theta_u)
-	# norm = sp.linalg.norm(partial_F_u_partial_theta_u)
+	norm = sp.linalg.norm(partial_F_u_partial_theta_u)
 	# print norm 
-	# if norm > 1:
-	# 	partial_F_u_partial_theta_u /= norm
+	if norm > 1:
+		partial_F_u_partial_theta_u /= norm
 
 	partial_L_G_u_partial_theta_u = partial_L_G_u_partial_F_u\
 	.dot(partial_F_u_partial_theta_u)
@@ -232,7 +232,7 @@ def update_theta_u(u, N, K, C, A, X, R, thetas, M, W, alpha, lamb_F, attribute_t
 
 	if abs(-0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
 			+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1[0]) > np.pi/2:
-		stdout.write("TOO BIG")
+		stdout.write("TOO BIG\n")
 		print u, -0.01*((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
 			+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u)).A1
 		print
@@ -405,6 +405,11 @@ def update_community_theta_c(c, N, K, A, X, R, thetas, M, W, alpha, lamb_F, attr
 
 	# print -0.01 * ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
 	# 	+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c)).A1
+
+	if 0.01 * ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
+		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c)) > np.pi / 2:
+		stdout.write("TOOBIG COMMUNITY\n")
+		return
 
 	return ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
 		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c))
