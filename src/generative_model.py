@@ -20,7 +20,7 @@ from sklearn.metrics import normalized_mutual_info_score as NMI
 
 import powerlaw
 
-from sklearn.cluster import KMeans
+# from sklearn.cluster import KMeans
 
 import matplotlib.pyplot as plt
 
@@ -692,7 +692,7 @@ def train(A, X, N, K, C, R, thetas, M, W,
 		# delta_thetas = np.zeros(thetas.shape)
 		# delta_M = np.zeros(M[:,0].shape)
 		# delta_W = np.zeros(W.shape)
-
+		
 	for e in range(num_epochs):
 
 		if num_processes is None:
@@ -703,10 +703,16 @@ def train(A, X, N, K, C, R, thetas, M, W,
 					thetas, M, W, alpha, lamb_F, attribute_type)
 				thetas[u] = thetas[u] % (2 * np.pi)
 
+			stdout.write("thetas\n")
+			stdout.flush()
+
 			# print "r"
 			for c in np.random.permutation(C):
 				M[0, c] -= eta * update_community_r_c(c, N, K, A, X, R,
 					thetas, M, W, alpha, lamb_F, attribute_type)
+
+			stdout.write("community radial\n")
+			stdout.flush()
 
 			# # # # print "community thetas"
 			for c in np.random.permutation(C):
@@ -714,10 +720,16 @@ def train(A, X, N, K, C, R, thetas, M, W,
 					thetas, M, W, alpha, lamb_F, attribute_type)
 				M[1, c] = M[1, c] % (2 * np.pi)
 
+			stdout.write("community thetas\n")
+			stdout.flush()
+
 			# # # # print "sd"
 			for c in np.random.permutation(C):
 				M[2, c] -= eta * update_community_sd_c(c, N, K, A, X, R,
 					thetas, M, W, alpha, lamb_F, attribute_type)
+
+			stdout.write("community sd\n")
+			stdout.flush()
 
 		else:
 			delta_thetas = np.concatenate(pool.map(partial(update_theta_u, 
@@ -728,11 +740,17 @@ def train(A, X, N, K, C, R, thetas, M, W,
 			thetas -= eta * delta_thetas
 			thetas = thetas % (2 * np.pi)
 
+			stdout.write("thetas\n")
+			stdout.flush()
+
 			delta_M = np.concatenate(pool.map(partial(update_community_r_c, 
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
 				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
 			M[0] -= eta * delta_M
+
+			stdout.write("community radial\n")
+			stdout.flush()
 
 			delta_M = np.concatenate(pool.map(partial(update_community_theta_c, 
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
@@ -741,11 +759,17 @@ def train(A, X, N, K, C, R, thetas, M, W,
 			M[1] -= eta * delta_M
 			M[1] = M[1] % (2 * np.pi)
 
+			stdout.write("community thetas\n")
+			stdout.flush()
+
 			delta_M = np.concatenate(pool.map(partial(update_community_sd_c, 
 				N=N, K=K, A=A, X=X, R=R, thetas=thetas, M=M, W=W, 
 				alpha=alpha, lamb_F=lamb_F, attribute_type=attribute_type), range(C)), axis=1)
 
 			M[2] -= eta * delta_M
+
+			stdout.write("community sd\n")
+			stdout.flush()
 		
 		_, h = hyperbolic_distance(R, thetas, M)
 		F = compute_F(h, M)
@@ -765,6 +789,9 @@ def train(A, X, N, K, C, R, thetas, M, W,
 				alpha=alpha, lamb_W=lamb_W, attribute_type=attribute_type), range(K)), axis=0)
 
 			W -= eta * delta_W
+
+		stdout.write("W\n")
+		stdout.flush()
 
 		L_G, L_X, l1_F, l1_W, loss = compute_likelihood(A, X, N, K, R, thetas, M, W, 
 			lamb_F=lamb_F, lamb_W=lamb_W, alpha=alpha, attribute_type=attribute_type)
@@ -813,40 +840,40 @@ def parse_args():
 
 	parser = argparse.ArgumentParser(description="Embed complex network to hyperbolic space.")
 	parser.add_argument("gml_file", metavar="gml_file_path",
-	                    help="path of gml file of network")
+						help="path of gml file of network")
 	parser.add_argument("attribute_file", metavar="attribute_file", 
-	                    help="path of attribute file")
+						help="path of attribute file")
 	parser.add_argument("num_communities", metavar="C", type=int,
-                    help="number of communities")
+					help="number of communities")
 	parser.add_argument("--T", dest="T", type=np.float,
-                    help="network temperature (if this is not given, it is estimated)", default=None)
+					help="network temperature (if this is not given, it is estimated)", default=None)
 	parser.add_argument("--gamma", dest="gamma", type=np.float,
-                    help="network scaling exponent (if this is not given, it is estimated)",
-                    default=None)
+					help="network scaling exponent (if this is not given, it is estimated)",
+					default=None)
 	parser.add_argument("--attribute_type", dest="attribute_type", 
-                    help="type of attribute (default is binary)", default="binary")
+					help="type of attribute (default is binary)", default="binary")
 	parser.add_argument("-e", dest="num_epochs", type=int,
-                    help="number of epochs to train for (default is 10000)", default=10000)
+					help="number of epochs to train for (default is 10000)", default=10000)
 	parser.add_argument("--eta", dest="eta", type=np.float,
-                    help="learning rate (default is 0.01)", default=1e-2)
+					help="learning rate (default is 0.01)", default=1e-2)
 	parser.add_argument("--lamb_F", dest="lamb_F", type=np.float,
-                    help="l1 penalty on F (default is 0.01) (default is 1e-2)", default=1e-2)
+					help="l1 penalty on F (default is 0.01) (default is 1e-2)", default=1e-2)
 	parser.add_argument("--lamb_W", dest="lamb_W", type=np.float,
-                    help="l1 penalty on W (default is 0.01) (default is 1e-2)", default=1e-2)
+					help="l1 penalty on W (default is 0.01) (default is 1e-2)", default=1e-2)
 	parser.add_argument("--alpha", dest="alpha", type=np.float,
-                    help="weighting of likelihoods (default is 0.5)", default=0.5)
+					help="weighting of likelihoods (default is 0.5)", default=0.5)
 	parser.add_argument("-c", dest="true_communities", 
-                help="path of csv file containing ground truth community memberships", default=None)
+				help="path of csv file containing ground truth community memberships", default=None)
 	parser.add_argument("-p", dest="num_processes", type=np.int,
-                help="number of parallel processes", default=None)
+				help="number of parallel processes", default=None)
 	parser.add_argument("--thetas", dest="thetas_filepath",
-            help="filepath of trained thetas vector (default is \"thetas.csv\")", default="thetas.csv")
+			help="filepath of trained thetas vector (default is \"thetas.csv\")", default="thetas.csv")
 	parser.add_argument("--M", dest="M_filepath",
-		    help="filepath of trained M matrix (default is \"M.csv\")", default="M.csv")
+			help="filepath of trained M matrix (default is \"M.csv\")", default="M.csv")
 	parser.add_argument("--W", dest="W_filepath",
-		    help="filepath of trained W matrix (default is \"W.csv\")", default="W.csv")
+			help="filepath of trained W matrix (default is \"W.csv\")", default="W.csv")
 	parser.add_argument("--plot", dest="plot_directory",
-			    help="path of directory to save plots")
+				help="path of directory to save plots")
 
 
 	args = parser.parse_args()
@@ -892,6 +919,7 @@ def main():
 	stdout.write("Training with eta={}, num_epochs={}, lamb_F={}, lamb_W={}, alpha={}, attribute_type={}, num_processes={}\n".format(eta,	
 		num_epochs, lamb_F, lamb_W, alpha, attribute_type, num_processes))
 	stdout.write("saving plots to {}\n".format(plot_directory))
+	stdout.flush()
 	thetas, M, W = train(A, X, N, K, C, R, thetas, M, W, 
 		eta=eta, lamb_F=lamb_F, lamb_W=lamb_W, alpha=alpha, 
 		num_epochs=num_epochs, true_communities=true_communities, 
