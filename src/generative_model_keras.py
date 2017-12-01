@@ -31,112 +31,123 @@ from keras.regularizers import l1
 
 class ThetaLookupLayer(Layer):
 
-    def __init__(self, **kwargs):
-        self.output_dim=1
-        super(ThetaLookupLayer, self).__init__(**kwargs)
+	def __init__(self, **kwargs):
+		self.output_dim=1
+		super(ThetaLookupLayer, self).__init__(**kwargs)
 
-    def build(self, input_shape):
-        # Create a trainable weight variable for this layer.
-        self.kernel = self.add_weight(name='theta_lookup_matrix', 
-                                      shape=(input_shape[1], self.output_dim),
-                                      initializer=uniform(minval=0, maxval=6),
-                                      trainable=True)
-        super(ThetaLookupLayer, self).build(input_shape)  # Be sure to call this somewhere!
+	def build(self, input_shape):
+		# Create a trainable weight variable for this layer.
+		self.kernel = self.add_weight(name='theta_lookup_matrix', 
+									  shape=(input_shape[1], self.output_dim),
+									  initializer=uniform(minval=0, maxval=6),
+									  trainable=True)
+		super(ThetaLookupLayer, self).build(input_shape)  # Be sure to call this somewhere!
 
-    def call(self, x):
-        return K.dot(x, self.kernel)
+	def call(self, x):
+		return K.dot(x, self.kernel)
 
-    def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.output_dim)
-    
+	def compute_output_shape(self, input_shape):
+		return (input_shape[0], self.output_dim)
+	
 class FLayer(Layer):
 
-    def __init__(self, output_dim, **kwargs):
-        self.output_dim = output_dim
-        super(FLayer, self).__init__(**kwargs)
+	def __init__(self, output_dim, activity_regularizer=None, **kwargs):
+		self.output_dim = output_dim
+		self.activity_regularizer = activity_regularizer
+		super(FLayer, self).__init__(**kwargs)
 
-    def build(self, input_shape):
-        # Create a trainable weight variable for this layer.
-        self.kernel = self.add_weight(name='M', 
-                                      shape=(3, self.output_dim),
-                                      initializer=uniform(minval=0, maxval=6),
-                                      trainable=True)
-        super(FLayer, self).build(input_shape)  # Be sure to call this somewhere!
+	def build(self, input_shape):
+		# Create a trainable weight variable for this layer.
+		self.kernel = self.add_weight(name='M', 
+									  shape=(3, self.output_dim),
+									  initializer=uniform(minval=0, maxval=6),
+									  trainable=True)
+		super(FLayer, self).build(input_shape)  # Be sure to call this somewhere!
 
-    def call(self, (thetas, R)):
-        delta_theta = np.pi - K.abs(np.pi - K.abs(thetas - self.kernel[1]))
-        H =  R + self.kernel[0] + 2 * K.log(delta_theta / 2)
-        F = K.exp(- 0.5 * K.square(H) / K.square(self.kernel[2]))
-        return F
+	def call(self, (thetas, R)):
+		delta_theta = np.pi - K.abs(np.pi - K.abs(thetas - self.kernel[1]))
+		H =  R + self.kernel[0] + 2 * K.log(delta_theta / 2)
+		F = K.exp(- 0.5 * K.square(H) / K.square(self.kernel[2]))
+		return F
 
-    def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.output_dim)
-    
+	def compute_output_shape(self, input_shape):
+		return (None, self.output_dim)
+
+	def get_config(self):
+        config = {
+            'activity_regularizer': regularizers.serialize(self.activity_regularizer),
+        }
+        base_config = super(Dense, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+	
 class PLayer(Layer):
 
-    def __init__(self, **kwargs):
-        self.output_dim = 1
-        super(PLayer, self).__init__(**kwargs)
+	def __init__(self, **kwargs):
+		self.output_dim = 1
+		super(PLayer, self).__init__(**kwargs)
 
-    def build(self, input_shape):
-        super(PLayer, self).build(input_shape)  # Be sure to call this somewhere!
+	def build(self, input_shape):
+		super(PLayer, self).build(input_shape)  # Be sure to call this somewhere!
 
-    def call(self, (F_u, F_v)):
-        P = 1 - K.exp( - K.sum( F_u * F_v, axis=1 ))
-        return K.reshape(P, (-1, 1))
+	def call(self, (F_u, F_v)):
+		P = 1 - K.exp( - K.sum( F_u * F_v, axis=1 ))
+		return K.reshape(P, (-1, 1))
 
-    def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.output_dim)
+	def compute_output_shape(self, input_shape):
+		return (None, self.output_dim)
 
 def build_model(N, K, C, lamb_F=1e-2, lamb_W=1e-2, alpha=0.5, attribute_type="binary"):
-    
-    u = Input(shape=(N,))
-    v = Input(shape=(N,))
-    
-    r_u = Input(shape=(1,))
-    r_v = Input(shape=(1,))
-    
-    theta_u = ThetaLookupLayer()(u)
-    theta_v = ThetaLookupLayer()(v)
-    
-    F = FLayer(C, kernel_regularizer=l1(lamb_F))
-    
-    F_u = F([theta_u, r_u])
-    F_v = F([theta_v, r_v])
-    
-    P_uv = PLayer()([F_u, F_v])
-    
-    if attribute_type == "binary":
-        activation = "sigmoid"
-    else:
-        activation = "linear"
-    
-    Q = Dense(K, activation=activation, kernel_regularizer=l1(lamb_W))
-    
-    Q_u = Q(F_u)
-    Q_v = Q(F_v)
-    
-    model = Model([u, v, r_u, r_v], [P_uv, Q_u, Q_v])
-    model.compile(optimizer="adam", loss=["binary_crossentropy"] * 3, loss_weights=[1-alpha, alpha, alpha])
-    
-    return model
 
-def generator(N, R, A, X, batch_size=100):
-    
-    I = np.identity(N)
-    
-    while True:
-        
-        U = np.random.choice(N)
-        V = np.random.choice(N)
-        
-        yield (I[U], I[V], R[U], R[V]), (A[U, V], X[U], X[V])
+	
+	u = Input(shape=(N,))
+	v = Input(shape=(N,))
+	
+	r_u = Input(shape=(1,))
+	r_v = Input(shape=(1,))
 
-def train_model(N, R, A, X, model, num_epochs=10000, batch_size=100):
-    
-    generator = generator(N, R, A, X, batch_size)
+	theta_lookup = ThetaLookupLayer()
+	
+	theta_u = theta_lookup(u)
+	theta_v = theta_lookup(v)
+	
+	F = FLayer(C, activity_regularizer=l1(lamb_W))
+	
+	F_u = F([theta_u, r_u])
+	F_v = F([theta_v, r_v])
+	
+	P_uv = PLayer()([F_u, F_v])
+	
+	if attribute_type == "binary":
+		activation = "sigmoid"
+	else:
+		activation = "linear"
+	
+	Q = Dense(K, activation=activation, kernel_regularizer=l1(lamb_W))
+	
+	Q_u = Q(F_u)
+	Q_v = Q(F_v)
+	
+	model = Model([u, v, r_u, r_v], [P_uv, Q_u, Q_v])
+	model.compile(optimizer="adam", loss=["binary_crossentropy"] * 3, loss_weights=[1-alpha, alpha, alpha])
+	
+	return model
 
-    model.fit_generator(generator, steps_per_epoch=1000, num_epochs=num_epochs)
+def input_pattern_generator(N, R, A, X, batch_size=100):
+	
+	I = np.identity(N)
+	
+	while True:
+		
+		U = np.random.choice(N, replace=True, size=(batch_size,))
+		V = np.random.choice(N, replace=True, size=(batch_size,))
+		
+		yield [I[U], I[V], R[U], R[V]], [A[U, V].T, X[U].todense(), X[V].todense()]
+
+def train_model(N, R, A, X, model, num_epochs=10000, batch_size=100, true_communities=None):
+	
+	generator = input_pattern_generator(N, R, A, X, batch_size)
+
+	model.fit_generator(generator, steps_per_epoch=1000, epochs=num_epochs, verbose=1)
 
 def estimate_T():
 	'''
@@ -293,19 +304,19 @@ def main():
 
 	C = args.num_communities
 	stdout.write("C={}\n".format(C))
-    
-    alpha = args.alpha
+	
+	alpha = args.alpha
 	lamb_F = args.lamb_F
 	lamb_W = args.lamb_W
-    attribute_type = args.attribute_type
+	attribute_type = args.attribute_type
 
 	model = build_model(N, K, C, lamb_F, lamb_W, alpha, attribute_type)
 	stdout.write("Built model\n")
-    
+	
 	num_epochs = args.num_epochs
-    batch_size = args.batch_size
+	batch_size = args.batch_size
 
-    
+	
 	true_communities = preprocess_true_communities(nodes, args.true_communities)
 
 	plot_directory = args.plot_directory
@@ -315,9 +326,13 @@ def main():
 	# stdout.write("saving plots to {}\n".format(plot_directory))
 	stdout.flush()
 
-    train_model(N, R, A, X, model, num_epochs, batch_size)
+	train_model(N, R, A, X, model, num_epochs, batch_size, true_communities)
 
-	stdout.write("Trained matrices\n") 
+	stdout.write("Trained matrices\n")
+
+	thetas = model.layers[2].get_weights()[0]
+	M = model.layers[5].get_weights()[0]
+	W = np.vstack(model.layers[7].get_weights())
 
 	thetas = pd.DataFrame(thetas)
 	M = pd.DataFrame(M)
