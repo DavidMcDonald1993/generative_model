@@ -132,6 +132,15 @@ def build_model(N, K, C, lamb_F=1e-2, lamb_W=1e-2, alpha=0.5, attribute_type="bi
 	
 	return model
 
+def save_trained_model(model):
+
+	model_json = model.to_json()
+
+	with open("models/model.json", "w") as f:
+		model_json.write(f)
+
+	model.save_weights("models/model_weights.h5")
+
 def input_pattern_generator(N, R, A, X, batch_size=100):
 	
 	I = np.identity(N)
@@ -347,6 +356,10 @@ def main():
 	W.to_csv(W_filepath, sep=",", index=False, header=False)
 
 	stdout.write("Written trained matrices to file\n")
+
+	save_trained_model(model)
+
+	stdout.write("Saved model\n")
 
 	return
 
