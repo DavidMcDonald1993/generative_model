@@ -223,10 +223,16 @@ def update_theta_u(u, N, A, X, thetas, M, W, delta_theta, H, F, P, Q,
 	derivative of uth row of F with repect to delta theta
 	multiply dF_uc/dh_uc with dh_uc/delta_theta_uc and ocnvert to 
 	sparse diagonal matrix 
+
 	'''
 
+	partial_H_u_partial_delta_theta_u = 4 / delta_theta[u]
+	norm = np.linalg.norm(partial_H_u_partial_delta_theta_u)
+	if norm > grad_clip_value:
+		partial_H_u_partial_delta_theta_u /= norm
+
 	partial_F_u_partial_delta_theta_u = np.multiply(np.multiply(-H[u] / np.square(M[2]), 
-		F[u, :-1]), 4 / delta_theta[u])
+		F[u, :-1]), partial_H_u_partial_delta_theta_u)
 	# norm = np.linalg.norm(partial_F_u_partial_delta_theta_u)
 	# if norm > 1:
 	# 	partial_F_u_partial_delta_theta_u /= norm
@@ -292,10 +298,9 @@ def update_theta_u(u, N, A, X, thetas, M, W, delta_theta, H, F, P, Q,
 	grad = ((1 - alpha) * partial_L_G_u_partial_theta_u + alpha * partial_L_X_u_partial_theta_u\
 		+ lamb_F * partial_l1_F_u_partial_F_u.dot(partial_F_u_partial_theta_u))
 
-	norm = np.linalg.norm(grad)
-
-	if norm > 1:
-		grad /= norm
+	# norm = np.linalg.norm(grad)
+	# if norm > grad_clip_value:
+	# 	grad /= norm
 
 	return grad
 
@@ -375,10 +380,9 @@ def update_community_r_c(c, N, A, X, thetas, M, W, delta_theta, H, F, P, Q,
 	# print grad
 	# print
 
-	norm = np.linalg.norm(grad)
-
-	if norm > 1:
-		grad /= norm
+	# norm = np.linalg.norm(grad)
+	# if norm > grad_clip_value:
+	# 	grad /= norm
 
 	return grad
 
@@ -394,10 +398,15 @@ def update_community_theta_c(c, N, A, X, thetas, M, W, delta_theta, H, F, P, Q,
 	# partial delta theta
 	partial_delta_theta_c_partial_theta_c = - np.multiply(-np.sign(np.pi - abs(thetas - M[1, c])), 
 		-np.sign(thetas - M[1, c]))
+
+	partial_H_c_partial_delta_theta_c = 4 / delta_theta[:,c]
+	norm = np.linalg.norm(partial_H_c_partial_delta_theta_c)
+	if norm > grad_clip_value:
+		partial_H_c_partial_delta_theta_c /= norm
 	
 
 	partial_F_c_partial_delta_theta_c = np.multiply(np.multiply(-H[:, c] / np.square(M[2, c]), 
-		F[:,c]), 4 / delta_theta[:,c]).T
+		F[:,c]), partial_H_c_partial_delta_theta_c).T
 
 	# norm = np.linalg.norm(partial_F_c_partial_delta_theta_c)
 	# if norm > 1:
@@ -440,9 +449,9 @@ def update_community_theta_c(c, N, A, X, thetas, M, W, delta_theta, H, F, P, Q,
 
 	grad = ((1 - alpha) * partial_L_G_c_partial_theta_c + alpha * partial_L_X_c_partial_theta_c\
 		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_theta_c))
-	norm = np.linalg.norm(grad)
-	if norm > 1:
-		grad /= norm
+	# norm = np.linalg.norm(grad)
+	# if norm > grad_clip_value:
+	# 	grad /= norm
 
 	return grad
 
@@ -486,9 +495,9 @@ def update_community_sd_c(c, N, A, X, thetas, M, W, delta_theta, H, F, P, Q,
 
 	grad = ((1 - alpha) * partial_L_G_c_partial_sd_c + alpha * partial_L_X_c_partial_sd_c\
 		+ lamb_F * partial_l1_F_c_partial_F_c.dot(partial_F_c_partial_sd_c))
-	norm = np.linalg.norm(grad)
-	if norm > 1:
-		grad /= norm
+	# norm = np.linalg.norm(grad)
+	# if norm > grad_clip_value:
+	# 	grad /= norm
 	return grad
 
 
@@ -527,9 +536,9 @@ def update_W_k(k, N, A, X, thetas, M, W, delta_theta, H, F, P, Q,
 	# print (alpha * partial_L_X_k_partial_W_k - lamb_W * partial_l1_W_k_partial_W_k).shape
 
 	grad = alpha * partial_L_X_k_partial_W_k + lamb_W * partial_l1_W_k_partial_W_k
-	norm = np.linalg.norm(grad)
-	if norm > 1:
-		grad /= norm
+	# norm = np.linalg.norm(grad)
+	# if norm > grad_clip_value:
+	# 	grad /= norm
 
 	return grad
 
