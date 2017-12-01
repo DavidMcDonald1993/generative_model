@@ -74,11 +74,11 @@ class FLayer(Layer):
 		return (None, self.output_dim)
 
 	def get_config(self):
-        config = {
-            'activity_regularizer': regularizers.serialize(self.activity_regularizer),
-        }
-        base_config = super(Dense, self).get_config()
-        return dict(list(base_config.items()) + list(config.items()))
+		config = {
+			'activity_regularizer': regularizers.serialize(self.activity_regularizer),
+		}
+		base_config = super(Dense, self).get_config()
+		return dict(list(base_config.items()) + list(config.items()))
 	
 class PLayer(Layer):
 
