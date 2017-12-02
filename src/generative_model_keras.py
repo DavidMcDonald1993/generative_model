@@ -27,7 +27,10 @@ from keras.engine.topology import Layer
 from keras.initializers import uniform
 from keras.models import Model
 from keras.layers import Input, Dense
+from keras import regularizers
+from keras import constraints
 from keras.regularizers import l1
+from keras.constraints import NonNeg
 
 class ThetaLookupLayer(Layer):
 
@@ -51,9 +54,10 @@ class ThetaLookupLayer(Layer):
 	
 class FLayer(Layer):
 
-	def __init__(self, output_dim, activity_regularizer=None, **kwargs):
+	def __init__(self, output_dim, activity_regularizer=None, kernel_constraint=None, **kwargs):
 		self.output_dim = output_dim
 		self.activity_regularizer = activity_regularizer
+		self.kernel_constraint = kernel_constraint
 		super(FLayer, self).__init__(**kwargs)
 
 	def build(self, input_shape):
@@ -66,7 +70,9 @@ class FLayer(Layer):
 
 	def call(self, (thetas, R)):
 		delta_theta = np.pi - K.abs(np.pi - K.abs(thetas - self.kernel[1]))
+		delta_theta = K.maximum(1e-8, delta_theta)
 		H =  R + self.kernel[0] + 2 * K.log(delta_theta / 2)
+		# H =  R + self.kernel[0] + delta_theta
 		F = K.exp(- 0.5 * K.square(H) / K.square(self.kernel[2]))
 		return F
 
@@ -76,8 +82,9 @@ class FLayer(Layer):
 	def get_config(self):
 		config = {
 			'activity_regularizer': regularizers.serialize(self.activity_regularizer),
+			'kernel_constraint': constraints.serialize(self.kernel_constraint),
 		}
-		base_config = super(Dense, self).get_config()
+		base_config = super(FLayer, self).get_config()
 		return dict(list(base_config.items()) + list(config.items()))
 	
 class PLayer(Layer):
@@ -110,7 +117,7 @@ def build_model(N, K, C, lamb_F=1e-2, lamb_W=1e-2, alpha=0.5, attribute_type="bi
 	theta_u = theta_lookup(u)
 	theta_v = theta_lookup(v)
 	
-	F = FLayer(C, activity_regularizer=l1(lamb_W))
+	F = FLayer(C, activity_regularizer=l1(lamb_F), kernel_constraint=NonNeg())
 	
 	F_u = F([theta_u, r_u])
 	F_v = F([theta_v, r_v])
@@ -122,24 +129,34 @@ def build_model(N, K, C, lamb_F=1e-2, lamb_W=1e-2, alpha=0.5, attribute_type="bi
 	else:
 		activation = "linear"
 	
-	Q = Dense(K, activation=activation, kernel_regularizer=l1(lamb_W))
+	Q = Dense(K, name="Q", activation=activation, kernel_regularizer=l1(lamb_W), bias_regularizer=l1(lamb_W))
 	
 	Q_u = Q(F_u)
 	Q_v = Q(F_v)
+
+	loss = ["binary_crossentropy"]
+	if attribute_type == "binary":
+		loss += ["binary_crossentropy"] * 2
+	else:
+		loss += ["mse"] * 2
+
+	trainable_model = Model([u, v, r_u, r_v], [P_uv, Q_u, Q_v], name="trainable_model")
+	trainable_model.compile(optimizer="adam", loss=loss, 
+		loss_weights=[1-alpha, alpha, alpha], )
+
+	community_assignment_model = Model([u, r_u], F_u, name="community_assignment_model")
 	
-	model = Model([u, v, r_u, r_v], [P_uv, Q_u, Q_v])
-	model.compile(optimizer="adam", loss=["binary_crossentropy"] * 3, loss_weights=[1-alpha, alpha, alpha])
-	
-	return model
+	return trainable_model, community_assignment_model
 
-def save_trained_model(model):
+def save_trained_models(models):
 
-	model_json = model.to_json()
+	for model in models:
+		model_json = model.to_json()
 
-	with open("models/model.json", "w") as f:
-		model_json.write(f)
+		with open("models/{}.json".format(model.name), "w") as f:
+			f.write(model_json)
 
-	model.save_weights("models/model_weights.h5")
+		model.save_weights("models/{}_weights.h5".format(model.name))
 
 def input_pattern_generator(N, R, A, X, batch_size=100):
 	
@@ -152,11 +169,18 @@ def input_pattern_generator(N, R, A, X, batch_size=100):
 		
 		yield [I[U], I[V], R[U], R[V]], [A[U, V].T, X[U].todense(), X[V].todense()]
 
-def train_model(N, R, A, X, model, num_epochs=10000, batch_size=100, true_communities=None):
+def train_model(N, R, A, X, trainable_model, community_assignment_model, 
+	num_epochs=10000, batch_size=100, true_communities=None):
 	
 	generator = input_pattern_generator(N, R, A, X, batch_size)
 
-	model.fit_generator(generator, steps_per_epoch=1000, epochs=num_epochs, verbose=1)
+	for epoch in range(num_epochs):
+		trainable_model.fit_generator(generator, steps_per_epoch=1000, epochs=1, verbose=1)
+		if true_communities is not None:
+			community_predictions = community_assignment_model.predict([np.identity(N), R])
+			community_membership_predictions = np.argmax(community_predictions, axis=1)
+			stdout.write("NMI: {}\n".format(NMI(true_communities, community_membership_predictions)))
+			stdout.flush()
 
 def estimate_T():
 	'''
@@ -282,6 +306,8 @@ def parse_args():
 			help="filepath of trained M matrix (default is \"M.csv\")", default="M.csv")
 	parser.add_argument("--W", dest="W_filepath",
 			help="filepath of trained W matrix (default is \"W.csv\")", default="W.csv")
+	parser.add_argument("--F", dest="F_filepath",
+			help="filepath of trained F matrix (default is \"F.csv\")", default="F.csv")
 	parser.add_argument("--plot", dest="plot_directory",
 				help="path of directory to save plots")
 
@@ -319,7 +345,7 @@ def main():
 	lamb_W = args.lamb_W
 	attribute_type = args.attribute_type
 
-	model = build_model(N, K, C, lamb_F, lamb_W, alpha, attribute_type)
+	trainable_model, community_assignment_model = build_model(N, K, C, lamb_F, lamb_W, alpha, attribute_type)
 	stdout.write("Built model\n")
 	
 	num_epochs = args.num_epochs
@@ -335,29 +361,33 @@ def main():
 	# stdout.write("saving plots to {}\n".format(plot_directory))
 	stdout.flush()
 
-	train_model(N, R, A, X, model, num_epochs, batch_size, true_communities)
+	train_model(N, R, A, X, trainable_model, community_assignment_model, num_epochs, batch_size, true_communities)
 
 	stdout.write("Trained matrices\n")
 
-	thetas = model.layers[2].get_weights()[0]
-	M = model.layers[5].get_weights()[0]
-	W = np.vstack(model.layers[7].get_weights())
+	thetas = trainable_model.layers[2].get_weights()[0]
+	M = trainable_model.layers[5].get_weights()[0]
+	W = np.vstack(trainable_model.layers[7].get_weights())
+	F = community_assignment_model.predict([np.identity(N), R])
 
 	thetas = pd.DataFrame(thetas)
 	M = pd.DataFrame(M)
 	W = pd.DataFrame(W)
+	F = pd.DataFrame(F)
 
 	thetas_filepath = args.thetas_filepath
 	M_filepath = args.M_filepath
 	W_filepath = args.W_filepath
+	F_filepath = args.F_filepath
 
 	thetas.to_csv(thetas_filepath, sep=",", index=False, header=False)
 	M.to_csv(M_filepath, sep=",", index=False, header=False)
 	W.to_csv(W_filepath, sep=",", index=False, header=False)
+	F.to_csv(F_filepath, sep=",", index=False, header=False)
 
 	stdout.write("Written trained matrices to file\n")
 
-	save_trained_model(model)
+	save_trained_models([trainable_model, community_assignment_model])
 
 	stdout.write("Saved model\n")
 
