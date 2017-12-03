@@ -33,6 +33,15 @@ from keras.regularizers import l1
 from keras.constraints import NonNeg
 from keras.optimizers import Adam
 
+# def theta_initilizer(shape, dtype, **kwargs):
+# 	return
+
+def M_initializer(shape, dtype=None):
+	r = K.random_normal((1, shape[1]), mean=10, stddev=1e-2, dtype=dtype)
+	thetas = K.random_uniform((1, shape[1]), maxval=2*np.pi, dtype=dtype)
+	sd = K.random_normal((1, shape[1]), mean=3, stddev=1e-2, dtype=dtype)
+	return K.concatenate([r, thetas, sd], axis=0)
+
 class ThetaLookupLayer(Layer):
 
 	def __init__(self, **kwargs):
@@ -43,7 +52,7 @@ class ThetaLookupLayer(Layer):
 		# Create a trainable weight variable for this layer.
 		self.kernel = self.add_weight(name='theta_lookup_matrix', 
 									  shape=(input_shape[1], self.output_dim),
-									  initializer=uniform(minval=0, maxval=6),
+									  initializer=uniform(maxval=2*np.pi),
 									  trainable=True)
 		super(ThetaLookupLayer, self).build(input_shape)  # Be sure to call this somewhere!
 
@@ -65,7 +74,7 @@ class FLayer(Layer):
 		# Create a trainable weight variable for this layer.
 		self.kernel = self.add_weight(name='M', 
 									  shape=(3, self.output_dim),
-									  initializer=uniform(minval=0, maxval=6), 
+									  initializer=M_initializer, 
 									  constraint=self.kernel_constraint,
 									  trainable=True)
 		super(FLayer, self).build(input_shape)  # Be sure to call this somewhere!
@@ -174,8 +183,8 @@ def input_pattern_generator(N, R, A, X, batch_size=100):
 		
 		yield [I[U], I[V], R[U], R[V]], [A[U, V].T, X[U].todense(), X[V].todense()]
 
-def train_model(N, R, A, X, trainable_model, community_assignment_model, 
-	num_epochs=10000, batch_size=100, true_communities=None):
+def train_model(N, C, R, A, X, trainable_model, community_assignment_model, 
+	num_epochs=10000, batch_size=100, true_communities=None, plot_directory=None):
 	
 	generator = input_pattern_generator(N, R, A, X, batch_size)
 
@@ -185,7 +194,9 @@ def train_model(N, R, A, X, trainable_model, community_assignment_model,
 			community_predictions = community_assignment_model.predict([np.identity(N), R])
 			community_membership_predictions = np.argmax(community_predictions, axis=1)
 			stdout.write("NMI: {}\n".format(NMI(true_communities, community_membership_predictions)))
-			stdout.flush()
+		draw_network(epoch, trainable_model, community_assignment_model, N, C, R, plot_directory)
+		stdout.write("Epoch {} complete\n".format(epoch))
+		stdout.flush()
 
 def estimate_T():
 	'''
@@ -251,28 +262,43 @@ def preprocess_true_communities(nodes, true_community_file):
 	community_df = pd.read_csv(true_community_file, header=None, index_col=0, sep=" ")
 	return community_df.iloc[nodes, 0].values
 
-def draw_network(N, C, R, thetas, M, e, L_G, L_X, plot_directory):
-
-	_, h = hyperbolic_distance(R, thetas, M)
-	F = compute_F(h, M)
-	assignments = F.argmax(axis=1).A1
-	assignment_strength = F[np.arange(N), assignments].A1
+def draw_network(epoch, trainable_model, community_assignment_model, N, C, R, plot_directory):
+	'''
+	TODO
+	'''
+	thetas = trainable_model.layers[2].get_weights()[0]
+	M = trainable_model.layers[5].get_weights()[0]
+	W = np.vstack(trainable_model.layers[7].get_weights())
+	F = community_assignment_model.predict([np.identity(N), R])
+	
+	assignments = F.argmax(axis=1)
+	assignment_strength = F[np.arange(N), assignments]
 
 	node_cartesian = np.column_stack([np.multiply(R, np.cos(thetas)),
 	np.multiply(R, np.sin(thetas))])
-	community_cartesian = np.column_stack([np.multiply(M[0], np.cos(M[1])).T, 
-		np.multiply(M[0], np.sin(M[1])).T])
+	community_cartesian = np.column_stack([np.multiply(M[0], np.cos(M[1])), 
+		np.multiply(M[0], np.sin(M[1]))])
+
+	# print type(node_cartesian)
+	# print node_cartesian.shape
+	# print node_cartesian[:,0].shape
+	# print assignments.shape
+	# print assignment_strength.shape
+
+	colours = np.random.rand(C, 3)
+	# c = colours[assignments]
+	# print c.shape
 
 	plt.figure(figsize=(15, 15))
-	plt.title("Epoch={}, L_G={}, L_X={}".format(e, L_G, L_X))
+	plt.title("Epoch={}".format(epoch))
 	plt.scatter(node_cartesian[:,0].A1, node_cartesian[:,1].A1, 
-		c=assignments, s=100*assignment_strength)
-	plt.scatter(community_cartesian[:,0].A1, community_cartesian[:,1].A1, 
-		c=np.arange(C), s=100)
-	plt.scatter(community_cartesian[:,0].A1, community_cartesian[:,1].A1, 
+		c=colours[assignments], s=100*assignment_strength)
+	plt.scatter(community_cartesian[:,0], community_cartesian[:,1], 
+		c=colours, s=100)
+	plt.scatter(community_cartesian[:,0], community_cartesian[:,1], 
 		c="k", s=25)
 	# plt.show()
-	plt.savefig(os.path.join(plot_directory, "epoch_{}.png".format(e)))
+	plt.savefig(os.path.join(plot_directory, "epoch_{}.png".format(epoch)))
 	plt.close()
 
 def parse_args():
@@ -366,7 +392,8 @@ def main():
 	# stdout.write("saving plots to {}\n".format(plot_directory))
 	stdout.flush()
 
-	train_model(N, R, A, X, trainable_model, community_assignment_model, num_epochs, batch_size, true_communities)
+	train_model(N, C, R, A, X, trainable_model, community_assignment_model, 
+		num_epochs, batch_size, true_communities, plot_directory)
 
 	stdout.write("Trained matrices\n")
 
