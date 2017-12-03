@@ -31,6 +31,7 @@ from keras import regularizers
 from keras import constraints
 from keras.regularizers import l1
 from keras.constraints import NonNeg
+from keras.optimizers import Adam
 
 class ThetaLookupLayer(Layer):
 
@@ -64,7 +65,8 @@ class FLayer(Layer):
 		# Create a trainable weight variable for this layer.
 		self.kernel = self.add_weight(name='M', 
 									  shape=(3, self.output_dim),
-									  initializer=uniform(minval=0, maxval=6),
+									  initializer=uniform(minval=0, maxval=6), 
+									  constraint=self.kernel_constraint,
 									  trainable=True)
 		super(FLayer, self).build(input_shape)  # Be sure to call this somewhere!
 
@@ -141,7 +143,10 @@ def build_model(N, K, C, lamb_F=1e-2, lamb_W=1e-2, alpha=0.5, attribute_type="bi
 		loss += ["mse"] * 2
 
 	trainable_model = Model([u, v, r_u, r_v], [P_uv, Q_u, Q_v], name="trainable_model")
-	trainable_model.compile(optimizer="adam", loss=loss, 
+
+
+	adam = Adam(clipnorm=1.0)
+	trainable_model.compile(optimizer=adam, loss=loss, 
 		loss_weights=[1-alpha, alpha, alpha], )
 
 	community_assignment_model = Model([u, r_u], F_u, name="community_assignment_model")
