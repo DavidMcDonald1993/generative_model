@@ -128,7 +128,9 @@ def build_model(N, K, C, lamb_F=1e-2, lamb_W=1e-2, alpha=0.5, attribute_type="bi
 	theta_u = theta_lookup(u)
 	theta_v = theta_lookup(v)
 	
-	F = FLayer(C, activity_regularizer=l1(lamb_F), kernel_constraint=NonNeg())
+	F = FLayer(C, 
+		# activity_regularizer=l1(lamb_F), kernel_constraint=NonNeg()
+		)
 	
 	F_u = F([theta_u, r_u])
 	F_v = F([theta_v, r_v])
@@ -140,7 +142,9 @@ def build_model(N, K, C, lamb_F=1e-2, lamb_W=1e-2, alpha=0.5, attribute_type="bi
 	else:
 		activation = "linear"
 	
-	Q = Dense(K, name="Q", activation=activation, kernel_regularizer=l1(lamb_W), bias_regularizer=l1(lamb_W))
+	Q = Dense(K, name="Q", activation=activation, 
+		# kernel_regularizer=l1(lamb_W), bias_regularizer=l1(lamb_W)
+		)
 	
 	Q_u = Q(F_u)
 	Q_v = Q(F_v)
