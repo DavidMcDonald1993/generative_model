@@ -32,7 +32,7 @@ from keras import constraints
 from keras.regularizers import l1
 from keras.constraints import NonNeg
 from keras.optimizers import Adam
-
+from keras.callbacks import History
 # def theta_initilizer(shape, dtype, **kwargs):
 # 	return
 
@@ -186,17 +186,20 @@ def input_pattern_generator(N, R, A, X, batch_size=100):
 def train_model(N, C, R, A, X, trainable_model, community_assignment_model, 
 	num_epochs=10000, batch_size=100, true_communities=None, plot_directory=None):
 	
+	callback = History()
 	generator = input_pattern_generator(N, R, A, X, batch_size)
 
 	for epoch in range(num_epochs):
-		trainable_model.fit_generator(generator, steps_per_epoch=1000, epochs=1, verbose=1)
+		trainable_model.fit_generator(generator, steps_per_epoch=1000, epochs=1, verbose=0, callbacks=[callback])
+		P_loss = callback.history["p_layer_1_loss"]
+		Q_loss = callback.history["Q_loss_1"]
 		if true_communities is not None:
 			community_predictions = community_assignment_model.predict([np.identity(N), R])
 			community_membership_predictions = np.argmax(community_predictions, axis=1)
 			stdout.write("NMI: {}\n".format(NMI(true_communities, community_membership_predictions)))
 		if epoch % 10 == 0:
-			draw_network(epoch, trainable_model, community_assignment_model, N, C, R, plot_directory)
-		stdout.write("Epoch {} complete\n".format(epoch))
+			draw_network(epoch, trainable_model, community_assignment_model, P_loss, Q_loss, N, C, R, plot_directory)
+		stdout.write("Epoch {} complete, P_loss: {} Q_loss: {}\n".format(epoch, P_loss, Q_loss))
 		stdout.flush()
 
 def estimate_T():
@@ -263,7 +266,7 @@ def preprocess_true_communities(nodes, true_community_file):
 	community_df = pd.read_csv(true_community_file, header=None, index_col=0, sep=" ")
 	return community_df.iloc[nodes, 0].values
 
-def draw_network(epoch, trainable_model, community_assignment_model, N, C, R, plot_directory):
+def draw_network(epoch, trainable_model, community_assignment_model, P_loss, Q_loss, N, C, R, plot_directory):
 	'''
 	TODO
 	'''
@@ -291,7 +294,7 @@ def draw_network(epoch, trainable_model, community_assignment_model, N, C, R, pl
 	# print c.shape
 
 	plt.figure(figsize=(15, 15))
-	plt.title("Epoch={}".format(epoch))
+	plt.title("Epoch={} P_loss={} Q_loss={}".format(epoch, P_loss, Q_loss))
 	plt.scatter(node_cartesian[:,0].A1, node_cartesian[:,1].A1, 
 		c=colours[assignments], s=100*assignment_strength)
 	plt.scatter(community_cartesian[:,0], community_cartesian[:,1], 
