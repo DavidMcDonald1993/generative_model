@@ -194,7 +194,8 @@ def train_model(N, C, R, A, X, trainable_model, community_assignment_model,
 			community_predictions = community_assignment_model.predict([np.identity(N), R])
 			community_membership_predictions = np.argmax(community_predictions, axis=1)
 			stdout.write("NMI: {}\n".format(NMI(true_communities, community_membership_predictions)))
-		draw_network(epoch, trainable_model, community_assignment_model, N, C, R, plot_directory)
+		if epoch % 10 == 0:
+			draw_network(epoch, trainable_model, community_assignment_model, N, C, R, plot_directory)
 		stdout.write("Epoch {} complete\n".format(epoch))
 		stdout.flush()
 
