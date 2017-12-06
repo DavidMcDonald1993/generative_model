@@ -13,8 +13,6 @@ import pandas as pd
 from sys import stdout
 
 from functools import partial
-# from multiprocessing.pool import ThreadPool as Pool
-# from multiprocessing import Pool
 
 from sklearn.metrics import normalized_mutual_info_score as NMI
 
@@ -197,6 +195,8 @@ def train_model(N, C, R, A, X, trainable_model, community_assignment_model,
 		trainable_model.fit_generator(generator, steps_per_epoch=1000, epochs=1, verbose=0, callbacks=[callback])
 		P_loss = callback.history["p_layer_1_loss"]
 		Q_loss = callback.history["Q_loss_1"]
+		assert not np.isnan(P_loss).any(), "P loss is nan"
+		assert not np.isnan(Q_loss).any(), "Q loss is nan"
 		if true_communities is not None:
 			community_predictions = community_assignment_model.predict([np.identity(N), R])
 			community_membership_predictions = np.argmax(community_predictions, axis=1)
