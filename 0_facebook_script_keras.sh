@@ -11,4 +11,4 @@ module load apps/python2/2.7.11
 module load apps/tensorflow/1.3.1-python-2.7.11
 module load apps/keras/2.0.8-python-2.7.11
 
-python src/generative_model_keras.py data/0_facebook_graph.gml data/0_facebook_attributes.csv 24 -c data/0_facebook_circles.csv --gamma 2.51017 --T 0.3497 --lamb_F 1e-20 --lamb_W 1e-20 --plot plots/0_facebook
+python src/generative_model_keras.py data/0_facebook_graph.gml data/0_facebook_attributes.csv 24 -c data/0_facebook_circles.csv --gamma 2.51017 --T 0.3497 --lamb_F 1e-2 --lamb_W 1e-2 --plot plots/0_facebook
